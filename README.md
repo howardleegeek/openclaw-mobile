@@ -4,7 +4,7 @@
 
 ## 你会得到什么
 - **Route A 预装 App**：用系统级预装（或出厂流程）把运行环境、安装、配置都自动化，隐藏 Termux/终端
-- **内置聊天 UI（语音）**：老大妈只看见一个大麦克风按钮，默认语音输入 + TTS 播报
+- **内置聊天 UI（语音）**：长辈用户只看见一个大麦克风按钮，默认语音输入 + TTS 播报
 - **device_token 出厂预置**：端侧不存任何上游模型厂商 key；只存设备 token，订阅/限额/路由全部在云端做
 - **OpenAI-compatible Proxy**：统一 `POST /v1/chat/completions`，按 token 档位路由：
   - Free → DeepSeek（省成本）
@@ -25,7 +25,7 @@ flowchart LR
 ## 仓库结构
 - `android/botdrop-android/`：Android 预装 App（基于 BotDrop fork，含 Route A 预装 + 内置语音聊天 UI）
 - `proxy/`：OpenAI-compatible Proxy（按 device_token tier 路由 DeepSeek/Kimi/Claude，含限额/降级骨架）
-- `PREINSTALL_MOMS.md`：3 万台出厂预装方案（老大妈用户）
+- `PREINSTALL_MOMS.md`：3 万台出厂预装方案（长辈用户）
 - `OPENCLAW_MOBILE_DETAILED_PLAN.md`：详细计划（域名/限额/订阅/风控/路线图）
 - `IDIOTPROOF_PLAN.md`：从“能跑”到“傻瓜可用”的可执行 checklist
 - `factory_provision_adb.sh`：出厂 ADB provisioning 模板

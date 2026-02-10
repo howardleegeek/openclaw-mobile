@@ -1,4 +1,4 @@
-# 3 万台手机“直接预装”方案（目标用户：老大妈）
+# 3 万台手机“直接预装”方案（目标用户：长辈用户）
 
 一句话：不要让用户接触“API key / Telegram Bot / 配置文件 / 终端”。预装时把运行环境和默认配置都准备好，用户只需要“点一下说话”。
 
@@ -34,7 +34,7 @@
 
 ---
 
-## 2) “老大妈 3 步走”开箱体验（OOBE）
+## 2) “长辈用户 3 步走”开箱体验（OOBE）
 
 ### Step 1：打开 App（自动修复权限）
 - 页面 1：一句话解释“需要后台运行”，一个大按钮“去开启”
@@ -61,7 +61,7 @@
   - 免费额度（每日/每月上限）
   - 付费订阅（Pro）
   - 机型/SKU 特供（比如 Kimi 模式）
-- **模式切换不要做成“让用户选模型”**（老大妈会被吓到）：只给“普通 / 更聪明 / 更省钱”这种按钮，甚至默认 Auto。
+- **模式切换不要做成“让用户选模型”**（长辈用户会被吓到）：只给“普通 / 更聪明 / 更省钱”这种按钮，甚至默认 Auto。
 - **实现建议（最省事）**：OpenClaw 端统一走 OpenAI-compatible proxy：
   - App 写入 `OPENAI_BASE_URL` 指向你的 proxy（例如 `https://api.openclaw.ai/v1`），不直连任何模型厂商
   - App 写入 `OPENAI_API_KEY=<device_token>`（token 不是 OpenAI key，只要你的 proxy 认得即可）
@@ -77,7 +77,7 @@
 `https://api.openclaw.ai/deepseek/v1` / `.../kimi/v1` / `.../claude/v1`（服务端仍需校验 token 档位，避免被改配置越权）。
 
 ### Step 3：开始说话（内置聊天 UI）
-老大妈不一定有 Telegram/Discord。
+长辈用户不一定有 Telegram/Discord。
 - App 内置 chat UI（文字 + 语音）
 - 默认语音输入（按钮按住说话）+ 语音播报（TTS）
 - Telegram/Discord 作为“家人远程陪护”选项，而不是必须项

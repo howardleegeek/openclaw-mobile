@@ -37,7 +37,7 @@ import java.util.UUID;
 
 /**
  * Minimal in-app chat UI (text + voice) for preinstalled devices.
- * For "老大妈" users: one screen, one big mic, no setup.
+ * For non-technical users: one screen, one big mic, no setup.
  */
 public class ChatActivity extends Activity {
 
@@ -409,4 +409,3 @@ public class ChatActivity extends Activity {
         }
     }
 }
-
