@@ -4,6 +4,8 @@ import json
 import os
 import secrets
 import time
+import uuid
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
@@ -56,6 +58,8 @@ LIMITS: Dict[str, TierLimits] = {
     "pro": TierLimits(max_context_tokens=32_000, max_output_tokens=1024, daily_tokens=600_000),
     "max": TierLimits(max_context_tokens=64_000, max_output_tokens=2048, daily_tokens=1_200_000),
 }
+
+_CALL_LLM_BODY: ContextVar[Optional[Dict[str, Any]]] = ContextVar("_CALL_LLM_BODY", default=None)
 
 
 def _approx_tokens(text: str) -> int:
@@ -111,6 +115,30 @@ async def _init_db() -> None:
             )
             """
         )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversations (
+              id TEXT PRIMARY KEY,
+              device_token TEXT NOT NULL,
+              title TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            )
+            """
+        )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS messages (
+              id TEXT PRIMARY KEY,
+              conversation_id TEXT NOT NULL,
+              role TEXT NOT NULL CHECK (role IN ('user','assistant','system')),
+              content TEXT NOT NULL,
+              created_at INTEGER NOT NULL
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_conversations_token_updated ON conversations(device_token, updated_at)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at)")
         await db.commit()
 
 
@@ -351,18 +379,15 @@ async def health() -> Dict[str, Any]:
     return {"ok": True, "ts": int(time.time())}
 
 
-async def _handle_chat_completions(request: Request, forced_provider: Optional[str]) -> Any:
-    auth = request.headers.get("authorization")
-    token = _parse_bearer(auth)
-    if not token:
-        raise HTTPException(status_code=401, detail="missing bearer token")
-
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="invalid json body")
-
-    # Figure out tier from token DB.
-    tier = await _get_tier_for_token(token)
+async def _call_llm(
+    *,
+    token: str,
+    tier: str,
+    messages: list,
+    forced_provider: str = None,
+    wants_stream: bool = False,
+) -> Dict[str, Any]:
+    # Returns an OpenAI-compatible chat.completion dict. Streaming is handled by the caller.
     limits = LIMITS.get(tier) or LIMITS["free"]
 
     # Optional provider forcing by URL prefix (deepseek/kimi/claude).
@@ -383,6 +408,14 @@ async def _handle_chat_completions(request: Request, forced_provider: Optional[s
     if not MOCK_MODE:
         _require_upstream_key(provider)
 
+    # Keep original request knobs when provided (temperature, top_p, etc).
+    ctx_body = _CALL_LLM_BODY.get()
+    if ctx_body is None:
+        body: Dict[str, Any] = {"messages": messages, "model": "oyster-auto"}
+    else:
+        body = dict(ctx_body)
+        body["messages"] = messages
+
     # Enforce daily usage (approx tokens).
     messages = body.get("messages") or []
     if not isinstance(messages, list):
@@ -393,7 +426,6 @@ async def _handle_chat_completions(request: Request, forced_provider: Optional[s
     body["messages"] = messages
 
     prompt_tokens = _messages_approx_tokens(messages)
-    _, _, reqs = await _get_daily_usage(token)
     used_prompt, used_completion, _ = await _get_daily_usage(token)
     used_total = used_prompt + used_completion
     if used_total + prompt_tokens > limits.daily_tokens:
@@ -406,8 +438,8 @@ async def _handle_chat_completions(request: Request, forced_provider: Optional[s
     else:
         body["max_tokens"] = limits.max_output_tokens
 
-    wants_stream = bool(body.get("stream"))
-    body["stream"] = False  # proxy handles streaming itself (1-chunk SSE)
+    # Proxy handles streaming itself (1-chunk SSE); upstream always gets stream=false.
+    body["stream"] = False
 
     # Keep the caller-provided model as a "public model" hint, but override upstream model per tier.
     public_model = str(body.get("model") or "oyster-auto")
@@ -417,7 +449,7 @@ async def _handle_chat_completions(request: Request, forced_provider: Optional[s
         reply = f"[MOCK:{provider}:{tier}] " + (messages[-1].get("content") if messages else "")
         completion_tokens = min(limits.max_output_tokens, _approx_tokens(reply))
         await _bump_daily_usage(token, prompt_tokens, completion_tokens)
-        res = {
+        return {
             "id": f"chatcmpl_{secrets.token_hex(12)}",
             "object": "chat.completion",
             "created": created,
@@ -429,9 +461,6 @@ async def _handle_chat_completions(request: Request, forced_provider: Optional[s
                 "total_tokens": prompt_tokens + completion_tokens,
             },
         }
-        if wants_stream:
-            return StreamingResponse(_openai_sse_one_chunk(res), media_type="text/event-stream")
-        return JSONResponse(res)
 
     if provider == "deepseek":
         upstream_body = dict(body)
@@ -442,9 +471,7 @@ async def _handle_chat_completions(request: Request, forced_provider: Optional[s
         usage = res.get("usage") or {}
         completion_tokens = int(usage.get("completion_tokens") or 0)
         await _bump_daily_usage(token, prompt_tokens, completion_tokens)
-        if wants_stream:
-            return StreamingResponse(_openai_sse_one_chunk(res), media_type="text/event-stream")
-        return JSONResponse(res)
+        return res
 
     if provider == "kimi":
         upstream_body = dict(body)
@@ -454,9 +481,7 @@ async def _handle_chat_completions(request: Request, forced_provider: Optional[s
         usage = res.get("usage") or {}
         completion_tokens = int(usage.get("completion_tokens") or 0)
         await _bump_daily_usage(token, prompt_tokens, completion_tokens)
-        if wants_stream:
-            return StreamingResponse(_openai_sse_one_chunk(res), media_type="text/event-stream")
-        return JSONResponse(res)
+        return res
 
     if provider == "claude":
         anth = await _call_anthropic_messages(body=body, max_tokens=int(body["max_tokens"]))
@@ -464,11 +489,39 @@ async def _handle_chat_completions(request: Request, forced_provider: Optional[s
         usage = res.get("usage") or {}
         completion_tokens = int(usage.get("completion_tokens") or 0)
         await _bump_daily_usage(token, prompt_tokens, completion_tokens)
-        if wants_stream:
-            return StreamingResponse(_openai_sse_one_chunk(res), media_type="text/event-stream")
-        return JSONResponse(res)
+        return res
 
     raise HTTPException(status_code=500, detail="unknown provider")
+
+
+async def _handle_chat_completions(request: Request, forced_provider: Optional[str]) -> Any:
+    auth = request.headers.get("authorization")
+    token = _parse_bearer(auth)
+    if not token:
+        raise HTTPException(status_code=401, detail="missing bearer token")
+
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    # Figure out tier from token DB.
+    tier = await _get_tier_for_token(token)
+    wants_stream = bool(body.get("stream"))
+    ctx = _CALL_LLM_BODY.set(body)
+    try:
+        res = await _call_llm(
+            token=token,
+            tier=tier,
+            messages=body.get("messages"),
+            forced_provider=forced_provider,
+            wants_stream=wants_stream,
+        )
+    finally:
+        _CALL_LLM_BODY.reset(ctx)
+
+    if wants_stream:
+        return StreamingResponse(_openai_sse_one_chunk(res), media_type="text/event-stream")
+    return JSONResponse(res)
 
 
 @app.post("/v1/chat/completions")
@@ -491,10 +544,240 @@ async def chat_completions_claude(request: Request) -> Any:
     return await _handle_chat_completions(request, forced_provider="claude")
 
 
+def _require_device_token(request: Request) -> str:
+    auth = request.headers.get("authorization")
+    token = _parse_bearer(auth)
+    if not token:
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    return token
+
+
+def _title_from_user_message(text: str) -> Optional[str]:
+    t = " ".join((text or "").strip().split())
+    if not t:
+        return None
+    return t[:50]
+
+
+@app.post("/v1/conversations")
+async def create_conversation(request: Request) -> Any:
+    device_token = _require_device_token(request)
+    # Ensure disabled tokens can't use conversation endpoints.
+    await _get_tier_for_token(device_token)
+
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    system_prompt = body.get("system_prompt")
+    if system_prompt is not None and not isinstance(system_prompt, str):
+        raise HTTPException(status_code=400, detail="system_prompt must be a string")
+    system_prompt = (system_prompt or "").strip()
+
+    now = int(time.time())
+    conversation_id = str(uuid.uuid4())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO conversations(id,device_token,title,created_at,updated_at) VALUES (?,?,?,?,?)",
+            (conversation_id, device_token, None, now, now),
+        )
+        if system_prompt:
+            message_id = str(uuid.uuid4())
+            await db.execute(
+                "INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES (?,?,?,?,?)",
+                (message_id, conversation_id, "system", system_prompt, now),
+            )
+        await db.commit()
+
+    return {"id": conversation_id, "title": None, "created_at": now}
+
+
+@app.get("/v1/conversations")
+async def list_conversations(request: Request, limit: int = 20, offset: int = 0) -> Any:
+    device_token = _require_device_token(request)
+    await _get_tier_for_token(device_token)
+
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be >= 0")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT
+              c.id,
+              c.title,
+              c.created_at,
+              c.updated_at,
+              (
+                SELECT COUNT(1)
+                FROM messages m
+                WHERE m.conversation_id = c.id
+              ) AS message_count
+            FROM conversations c
+            WHERE c.device_token = ?
+            ORDER BY c.updated_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (device_token, int(limit), int(offset)),
+        ) as cur:
+            rows = await cur.fetchall()
+
+    return {"conversations": [dict(r) for r in rows]}
+
+
+@app.get("/v1/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str, request: Request) -> Any:
+    device_token = _require_device_token(request)
+    await _get_tier_for_token(device_token)
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id,title,created_at FROM conversations WHERE id=? AND device_token=?",
+            (conversation_id, device_token),
+        ) as cur:
+            conv = await cur.fetchone()
+        if not conv:
+            raise HTTPException(status_code=404, detail="conversation not found")
+
+        async with db.execute(
+            "SELECT id,role,content,created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC, rowid ASC",
+            (conversation_id,),
+        ) as cur:
+            msgs = await cur.fetchall()
+
+    return {
+        "id": conv["id"],
+        "title": conv["title"],
+        "created_at": conv["created_at"],
+        "messages": [dict(m) for m in msgs],
+    }
+
+
+@app.post("/v1/conversations/{conversation_id}/chat")
+async def conversation_chat(conversation_id: str, request: Request) -> Any:
+    device_token = _require_device_token(request)
+    tier = await _get_tier_for_token(device_token)
+
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    user_text = body.get("message")
+    if not isinstance(user_text, str):
+        raise HTTPException(status_code=400, detail="message must be a string")
+    user_text = user_text.strip()
+    if not user_text:
+        raise HTTPException(status_code=400, detail="message must be non-empty")
+    if len(user_text) > 50_000:
+        raise HTTPException(status_code=400, detail="message too long (max 50000 chars)")
+
+    now = int(time.time())
+    user_message_id = str(uuid.uuid4())
+
+    # Step 2/3: verify ownership + store user message.
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id,title FROM conversations WHERE id=? AND device_token=?",
+            (conversation_id, device_token),
+        ) as cur:
+            conv = await cur.fetchone()
+        if not conv:
+            raise HTTPException(status_code=404, detail="conversation not found")
+
+        await db.execute(
+            "INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES (?,?,?,?,?)",
+            (user_message_id, conversation_id, "user", user_text, now),
+        )
+        title_candidate = _title_from_user_message(user_text) or None
+        await db.execute(
+            """
+            UPDATE conversations
+            SET
+              updated_at = ?,
+              title = CASE WHEN title IS NULL THEN ? ELSE title END
+            WHERE id=? AND device_token=?
+            """,
+            (now, title_candidate, conversation_id, device_token),
+        )
+        await db.commit()
+
+        # Step 4/5: read full history -> OpenAI messages
+        async with db.execute(
+            "SELECT role,content FROM messages WHERE conversation_id=? ORDER BY created_at ASC, rowid ASC",
+            (conversation_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+
+    oai_messages = [{"role": r["role"], "content": r["content"]} for r in rows]
+
+    # Step 6: reuse existing LLM routing/limits/quota logic.
+    completion = await _call_llm(token=device_token, tier=tier, messages=oai_messages, forced_provider=None, wants_stream=False)
+
+    # Step 7: extract assistant content
+    choice0 = (completion.get("choices") or [{}])[0] or {}
+    assistant_msg = choice0.get("message") or {}
+    assistant_content = assistant_msg.get("content")
+    if assistant_content is None:
+        assistant_content = ""
+    if not isinstance(assistant_content, str):
+        assistant_content = str(assistant_content)
+
+    # Step 8/9: store assistant message + bump updated_at.
+    assistant_now = int(time.time())
+    assistant_message_id = str(uuid.uuid4())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES (?,?,?,?,?)",
+            (assistant_message_id, conversation_id, "assistant", assistant_content, assistant_now),
+        )
+        await db.execute(
+            "UPDATE conversations SET updated_at=? WHERE id=? AND device_token=?",
+            (assistant_now, conversation_id, device_token),
+        )
+        await db.commit()
+
+    return {
+        "message_id": assistant_message_id,
+        "role": "assistant",
+        "content": assistant_content,
+        "conversation_id": conversation_id,
+        "created_at": assistant_now,
+    }
+
+
+@app.delete("/v1/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, request: Request) -> Any:
+    device_token = _require_device_token(request)
+    await _get_tier_for_token(device_token)
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id FROM conversations WHERE id=? AND device_token=?",
+            (conversation_id, device_token),
+        ) as cur:
+            row = await cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="conversation not found")
+
+        await db.execute("DELETE FROM messages WHERE conversation_id=?", (conversation_id,))
+        await db.execute("DELETE FROM conversations WHERE id=? AND device_token=?", (conversation_id, device_token))
+        await db.commit()
+
+    return {"deleted": True}
+
+
 def _admin_check(x_admin_key: Optional[str]) -> None:
     if not ADMIN_KEY:
         raise HTTPException(status_code=404, detail="admin disabled")
-    if not x_admin_key or x_admin_key != ADMIN_KEY:
+    if not x_admin_key or not secrets.compare_digest(x_admin_key, ADMIN_KEY):
         raise HTTPException(status_code=401, detail="bad admin key")
 
 

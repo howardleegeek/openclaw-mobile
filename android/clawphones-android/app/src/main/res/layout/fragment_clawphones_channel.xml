@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="@color/clawphones_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Header -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Step 3/3"
+            android:textSize="14sp"
+            android:textColor="@color/clawphones_secondary_text"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connect Telegram"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/clawphones_on_background"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Step 1: Setup Bot -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Step 1: Get Setup Help"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="@color/clawphones_on_background"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open the setup bot to create your Telegram bot and get your User ID."
+            android:textSize="14sp"
+            android:textColor="@color/clawphones_secondary_text"
+            android:layout_marginBottom="12dp" />
+
+        <Button
+            android:id="@+id/channel_open_setup_bot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open @ClawPhonesSetupBot"
+            android:textSize="16sp"
+            android:padding="16dp"
+            android:layout_marginBottom="24dp"
+            android:background="@drawable/clawphones_button_outline_bg"
+            android:textColor="@color/clawphones_accent" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/clawphones_surface"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Step 2: Enter Details -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Step 2: Enter Your Details"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="@color/clawphones_on_background"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Bot Token -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Bot Token (from @BotFather)"
+            android:textSize="14sp"
+            android:textColor="@color/clawphones_secondary_text"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/channel_token_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="123456789:ABCdefGHI..."
+            android:inputType="text"
+            android:padding="14dp"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:background="@drawable/clawphones_input_bg"
+            android:textColor="@color/clawphones_on_background"
+            android:textColorHint="@color/clawphones_secondary_text"
+            android:layout_marginBottom="16dp" />
+
+        <!-- User ID -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Your User ID (from @ClawPhonesSetupBot)"
+            android:textSize="14sp"
+            android:textColor="@color/clawphones_secondary_text"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/channel_userid_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="123456789"
+            android:inputType="number"
+            android:padding="14dp"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:background="@drawable/clawphones_input_bg"
+            android:textColor="@color/clawphones_on_background"
+            android:textColorHint="@color/clawphones_secondary_text"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Connect Button -->
+        <Button
+            android:id="@+id/channel_connect_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connect &amp; Start"
+            android:textSize="16sp"
+            android:padding="16dp"
+            android:background="@drawable/clawphones_button_bg"
+            android:textColor="#1A1A1A"
+            android:textStyle="bold" />
+
+        <!-- Error message -->
+        <TextView
+            android:id="@+id/channel_error_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#F44336"
+            android:visibility="gone"
+            android:layout_marginTop="16dp" />
+
+    </LinearLayout>
+</ScrollView>

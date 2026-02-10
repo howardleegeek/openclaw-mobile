@@ -1,0 +1,332 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		7B5A22A66466928C9A83C19F /* ClawPhonesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA521445573D71EA58448AA /* ClawPhonesApp.swift */; };
+		3E524F809A74A381D7863674 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C25043BCDD3165B1A9EE994 /* ContentView.swift */; };
+		6308C676767303AC938FD129 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4B6AD8A22BC95F89042271 /* ChatViewModel.swift */; };
+		DD7A8C00A79304765E826751 /* ConversationListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A672C209A8C2BFB13F1B726 /* ConversationListViewModel.swift */; };
+		3AC6F9CE2F15D28C81501EEA /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEA999748FD4880AE76B25A /* ChatView.swift */; };
+		87D417640B4FE90663F8EE30 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575C0A74873CA4D4C6F87F30 /* MessageRow.swift */; };
+		BF0C057F4C1EB0639041006A /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 529105A52C7F000A0054A75F /* ChatInputBar.swift */; };
+		6B1685B1F341B6314DDB77A5 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AC5AE07859E9065699CB5FE /* ConversationListView.swift */; };
+		E0824FE9B448855B1D60031B /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BF3986839DCF6C9FD74576D /* SetupView.swift */; };
+		B909E20879439BD44BC7D68E /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9BE935A3A036729805815B /* Message.swift */; };
+		53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */; };
+		7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */; };
+		A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */; };
+		96B5011849CE99D54BE27B2D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 06896E4FD29AE979B8155D6D /* Assets.xcassets */; };
+		449C4D244B7A1C00D4AD632E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 30145ADC199352484415BA60 /* PrivacyInfo.xcprivacy */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		97D8E07F8EC6E306984E5477 /* ClawPhones.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawPhones.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DAA521445573D71EA58448AA /* ClawPhonesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawPhonesApp.swift; sourceTree = "<group>"; };
+		0C25043BCDD3165B1A9EE994 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		FB4B6AD8A22BC95F89042271 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		0A672C209A8C2BFB13F1B726 /* ConversationListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewModel.swift; sourceTree = "<group>"; };
+		DFEA999748FD4880AE76B25A /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		575C0A74873CA4D4C6F87F30 /* MessageRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRow.swift; sourceTree = "<group>"; };
+		529105A52C7F000A0054A75F /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
+		3AC5AE07859E9065699CB5FE /* ConversationListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListView.swift; sourceTree = "<group>"; };
+		8BF3986839DCF6C9FD74576D /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+		5B9BE935A3A036729805815B /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceConfig.swift; sourceTree = "<group>"; };
+		5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenClawAPI.swift; sourceTree = "<group>"; };
+		06896E4FD29AE979B8155D6D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		30145ADC199352484415BA60 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		4F8A40DE8CD9B14BD1C5C292 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1AD1CBD8AA5254B9A3916324 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		34F314203B094482B0EAA16A = {
+			isa = PBXGroup;
+			children = (
+				DCCEDC410DB935B9E52FAE3E /* ClawPhones */,
+				0B03332A480319ACB36EF24D /* Frameworks */,
+				8C1969BC5989E871C77EB3CC /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DCCEDC410DB935B9E52FAE3E /* ClawPhones */ = {
+			isa = PBXGroup;
+			children = (
+				3F30F51DD64BBFEA6B617FBB /* App */,
+				AB9101FEE8BC1B980D750FB8 /* Models */,
+				A42DDB42031A67342B35AD3C /* Services */,
+				0F0664F2F27FB8FFE85AE77B /* ViewModels */,
+				A830CB08151C908F0230369D /* Views */,
+				8807D7445080FFAB6588D255 /* Config */,
+				06896E4FD29AE979B8155D6D /* Assets.xcassets */,
+			);
+			path = ClawPhones;
+			sourceTree = "<group>";
+		};
+		3F30F51DD64BBFEA6B617FBB /* App */ = {
+			isa = PBXGroup;
+			children = (
+				DAA521445573D71EA58448AA /* ClawPhonesApp.swift */,
+				0C25043BCDD3165B1A9EE994 /* ContentView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		AB9101FEE8BC1B980D750FB8 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				5B9BE935A3A036729805815B /* Message.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		A42DDB42031A67342B35AD3C /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */,
+				F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */,
+				5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		0F0664F2F27FB8FFE85AE77B /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				FB4B6AD8A22BC95F89042271 /* ChatViewModel.swift */,
+				0A672C209A8C2BFB13F1B726 /* ConversationListViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		A830CB08151C908F0230369D /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				DFEA999748FD4880AE76B25A /* ChatView.swift */,
+				529105A52C7F000A0054A75F /* ChatInputBar.swift */,
+				3AC5AE07859E9065699CB5FE /* ConversationListView.swift */,
+				575C0A74873CA4D4C6F87F30 /* MessageRow.swift */,
+				8BF3986839DCF6C9FD74576D /* SetupView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		8807D7445080FFAB6588D255 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				4F8A40DE8CD9B14BD1C5C292 /* Info.plist */,
+				30145ADC199352484415BA60 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		0B03332A480319ACB36EF24D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		8C1969BC5989E871C77EB3CC /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				97D8E07F8EC6E306984E5477 /* ClawPhones.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E0AA911DA650DD5907F19F75 /* ClawPhones */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 95A640D87D6C63E4D169B490 /* Build configuration list for PBXNativeTarget "ClawPhones" */;
+			buildPhases = (
+				99E22745F57A8E61CEDF85E4 /* Sources */,
+				1AD1CBD8AA5254B9A3916324 /* Frameworks */,
+				8C44A463970F5127DD0F2AB2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ClawPhones;
+			productName = ClawPhones;
+			productReference = 97D8E07F8EC6E306984E5477 /* ClawPhones.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		101EB9685E73B1F469ABFA35 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 8FE9C3853D5B1C8A37321800 /* Build configuration list for PBXProject "ClawPhones" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 34F314203B094482B0EAA16A;
+			productRefGroup = 8C1969BC5989E871C77EB3CC /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E0AA911DA650DD5907F19F75 /* ClawPhones */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8C44A463970F5127DD0F2AB2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				96B5011849CE99D54BE27B2D /* Assets.xcassets in Resources */,
+				449C4D244B7A1C00D4AD632E /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		99E22745F57A8E61CEDF85E4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B5A22A66466928C9A83C19F /* ClawPhonesApp.swift in Sources */,
+				3E524F809A74A381D7863674 /* ContentView.swift in Sources */,
+				6308C676767303AC938FD129 /* ChatViewModel.swift in Sources */,
+				DD7A8C00A79304765E826751 /* ConversationListViewModel.swift in Sources */,
+				3AC6F9CE2F15D28C81501EEA /* ChatView.swift in Sources */,
+				87D417640B4FE90663F8EE30 /* MessageRow.swift in Sources */,
+				BF0C057F4C1EB0639041006A /* ChatInputBar.swift in Sources */,
+				6B1685B1F341B6314DDB77A5 /* ConversationListView.swift in Sources */,
+				E0824FE9B448855B1D60031B /* SetupView.swift in Sources */,
+				B909E20879439BD44BC7D68E /* Message.swift in Sources */,
+				53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */,
+				7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */,
+				A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		EA172FF13D5A375B78E9B9B3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A3BD57E4E3807AC5943B860F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		AB4D49399E25D9F34F62E5C6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = ClawPhones/Config/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.clawphones.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F2B5360977DE765EF0D53AB4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = ClawPhones/Config/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.clawphones.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		95A640D87D6C63E4D169B490 /* Build configuration list for PBXNativeTarget "ClawPhones" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB4D49399E25D9F34F62E5C6 /* Debug */,
+				F2B5360977DE765EF0D53AB4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8FE9C3853D5B1C8A37321800 /* Build configuration list for PBXProject "ClawPhones" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EA172FF13D5A375B78E9B9B3 /* Debug */,
+				A3BD57E4E3807AC5943B860F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 101EB9685E73B1F469ABFA35 /* Project object */;
+}

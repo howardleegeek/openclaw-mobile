@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/clawphones_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="12dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ClawPhones"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@color/clawphones_on_background" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="点麦克风说话"
+            android:textSize="13sp"
+            android:textColor="@color/clawphones_secondary_text" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/chat_recycler"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:clipToPadding="false"
+        android:overScrollMode="never" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:gravity="center_vertical"
+        android:background="@color/clawphones_background">
+
+        <ImageButton
+            android:id="@+id/chat_mic"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:src="@android:drawable/ic_btn_speak_now"
+            android:contentDescription="Mic"
+            android:background="@drawable/clawphones_button_outline_bg"
+            android:tint="@color/clawphones_accent"
+            android:layout_marginEnd="10dp" />
+
+        <EditText
+            android:id="@+id/chat_input"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:hint="也可以打字…"
+            android:textColor="@color/clawphones_on_background"
+            android:textColorHint="@color/clawphones_secondary_text"
+            android:background="@drawable/clawphones_input_bg"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:singleLine="true" />
+
+        <ImageButton
+            android:id="@+id/chat_send"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:src="@android:drawable/ic_menu_send"
+            android:contentDescription="Send"
+            android:background="@drawable/clawphones_button_outline_bg"
+            android:tint="@color/clawphones_accent"
+            android:layout_marginStart="10dp" />
+    </LinearLayout>
+
+</LinearLayout>

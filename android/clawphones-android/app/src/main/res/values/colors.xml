@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ClawPhones Brand Colors -->
+    <color name="clawphones_background">#1A1A1A</color>
+    <color name="clawphones_surface">#2A2A2A</color>
+    <color name="clawphones_on_background">#F5F0E6</color>
+    <color name="clawphones_secondary_text">#888888</color>
+    <color name="clawphones_accent">#E8A853</color>
+    <color name="clawphones_accent_dark">#C08A3A</color>
+
+    <!-- Status colors -->
+    <color name="status_connected">#4CAF50</color>
+    <color name="status_disconnected">#9E9E9E</color>
+</resources>

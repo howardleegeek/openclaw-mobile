@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <style name="TermuxAlertDialogStyle" parent="@android:style/Theme.Material.Dialog.Alert">
+        <!-- ClawPhones dark theme for dialogs -->
+        <item name="android:colorAccent">@color/clawphones_accent</item>
+        <item name="android:textColorPrimary">@color/clawphones_on_background</item>
+        <item name="android:textColorSecondary">@color/clawphones_secondary_text</item>
+        <item name="android:background">@color/clawphones_surface</item>
+    </style>
+
+    <style name="TermuxActivity.Drawer.ButtonBarStyle.Light" parent="@style/Widget.MaterialComponents.Button.TextButton">
+        <item name="android:textColor">@color/clawphones_on_background</item>
+    </style>
+
+    <style name="TermuxActivity.Drawer.ButtonBarStyle.Dark" parent="@style/Widget.MaterialComponents.Button.TextButton">
+        <item name="android:textColor">@color/clawphones_on_background</item>
+        <item name="rippleColor">@color/clawphones_accent</item>
+    </style>
+
+</resources>

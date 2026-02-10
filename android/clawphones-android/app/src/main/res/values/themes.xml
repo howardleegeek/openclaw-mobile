@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+     https://material.io/develop/android/theming/dark
+    -->
+
+    <!-- TermuxApp Light DarkActionBar theme. -->
+    <style name="Theme.TermuxApp.Light.DarkActionBar" parent="Theme.BaseActivity.Light.DarkActionBar"/>
+    <!-- TermuxApp Light NoActionBar theme. -->
+    <style name="Theme.TermuxApp.Light.NoActionBar" parent="Theme.BaseActivity.Light.NoActionBar"/>
+
+    <!-- TermuxApp DayNight DarkActionBar theme. -->
+    <style name="Theme.TermuxApp.DayNight.DarkActionBar" parent="Theme.BaseActivity.DayNight.DarkActionBar"/>
+    <!-- TermuxApp DayNight NoActionBar theme. -->
+    <style name="Theme.TermuxApp.DayNight.NoActionBar" parent="Theme.BaseActivity.DayNight.NoActionBar"/>
+
+
+    <!-- TermuxActivity DayNight NoActionBar theme. -->
+    <style name="Theme.TermuxActivity.DayNight.NoActionBar" parent="Theme.TermuxApp.DayNight.NoActionBar">
+        <!-- ClawPhones primary brand color. -->
+        <item name="colorPrimary">@color/clawphones_background</item>
+        <item name="colorPrimaryDark">#111111</item>
+        <item name="colorPrimaryVariant">@color/clawphones_background</item>
+        <item name="colorAccent">@color/clawphones_accent</item>
+
+        <item name="android:windowBackground">@color/clawphones_background</item>
+        <item name="android:textColor">@color/clawphones_on_background</item>
+        <item name="android:textColorPrimary">@color/clawphones_on_background</item>
+        <item name="android:textColorSecondary">@color/clawphones_secondary_text</item>
+        <item name="android:statusBarColor">#111111</item>
+        <item name="android:navigationBarColor">#111111</item>
+
+        <!-- Avoid action mode toolbar pushing down terminal content when
+             selecting text on pre-6.0 (non-floating toolbar). -->
+        <item name="android:windowActionModeOverlay">true</item>
+
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
+
+        <!-- https://developer.android.com/training/tv/start/start.html#transition-color -->
+        <item name="android:windowAllowReturnTransitionOverlap">true</item>
+        <item name="android:windowAllowEnterTransitionOverlap">true</item>
+
+        <!-- Left drawer. -->
+        <item name="buttonBarButtonStyle">@style/TermuxActivity.Drawer.ButtonBarStyle.Dark</item>
+        <item name="termuxActivityDrawerBackground">@color/clawphones_surface</item>
+        <item name="termuxActivityDrawerImageTint">@color/clawphones_accent</item>
+
+        <!-- Extra keys colors. -->
+        <item name="extraKeysButtonTextColor">@color/clawphones_on_background</item>
+        <item name="extraKeysButtonActiveTextColor">@color/clawphones_accent</item>
+        <item name="extraKeysButtonBackgroundColor">@color/clawphones_surface</item>
+        <item name="extraKeysButtonActiveBackgroundColor">@color/clawphones_accent_dark</item>
+    </style>
+
+</resources>
