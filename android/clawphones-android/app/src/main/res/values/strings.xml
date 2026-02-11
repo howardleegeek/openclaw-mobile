@@ -266,6 +266,7 @@
 
     <!-- ClawPhones Chat -->
     <string name="chat_new_conversation">新对话</string>
+    <string name="chat_menu_coverage_map">覆盖热力图</string>
     <string name="chat_menu_logout">退出登录</string>
     <string name="chat_welcome_message">你好！有什么我可以帮你的吗？</string>
     <string name="chat_login_expired">登录已过期，请重新登录</string>
@@ -298,6 +299,18 @@
     <string name="chat_speech_status_done">识别完成</string>
     <string name="chat_speech_error_no_match">没有识别到语音，请再试一次</string>
     <string name="chat_error_unknown">未知错误</string>
+
+    <!-- Coverage Map -->
+    <string name="coverage_map_title">覆盖热力图</string>
+    <string name="coverage_map_legend_title">覆盖状态</string>
+    <string name="coverage_map_legend_recent">● 最近 1h</string>
+    <string name="coverage_map_legend_stale">● 1-24h</string>
+    <string name="coverage_map_legend_empty">● 无覆盖</string>
+    <string name="coverage_map_load_failed">覆盖数据加载失败</string>
+    <string name="coverage_map_permission_denied">未授予定位权限，无法显示当前位置</string>
+    <string name="coverage_map_self_node">我的节点</string>
+    <string name="coverage_map_neighbor_node">邻居节点</string>
+    <string name="google_maps_key">YOUR_GOOGLE_MAPS_API_KEY</string>
 
 
 
@@ -438,6 +451,7 @@
     <string name="dashboard_device_ip_placeholder">&lt;设备 IP&gt;</string>
     <string name="dashboard_password_not_set">&lt;未设置&gt;</string>
     <string name="dashboard_ssh_info">ssh -p 8022 %1$s\n密码：%2$s</string>
+    <string name="dashboard_button_alert_history">告警历史</string>
     <string name="dashboard_button_node_mode">Node Mode</string>
 
     <!-- ClawPhones Plan -->
@@ -537,6 +551,8 @@
     <string name="node_mode_stats_frames">Frames Captured</string>
     <string name="node_mode_stats_events">Events Detected</string>
     <string name="node_mode_stats_uptime">Uptime</string>
+    <string name="node_mode_coverage_button">Coverage Map</string>
+    <string name="node_mode_history_button">Alert History</string>
     <string name="node_mode_settings_button">Node Settings</string>
     <string name="node_mode_settings_title">Node Settings</string>
     <string name="node_mode_settings_relay_url">Relay URL</string>
@@ -556,5 +572,42 @@
     <string name="node_mode_notification_channel_desc">Node mode foreground status</string>
     <string name="node_mode_notification_running">Node mode is running</string>
     <string name="node_mode_notification_stats">Frames %1$d • Events %2$d</string>
+    <string name="node_mode_voice_section_title">Voice Response</string>
+    <string name="node_mode_voice_enabled">Enable voice response</string>
+    <string name="node_mode_voice_response_label">Response type</string>
+    <string name="node_mode_voice_response_deterrent">Deterrent (已录像，请勿靠近)</string>
+    <string name="node_mode_voice_response_welcome">Welcome (欢迎回家)</string>
+    <string name="node_mode_voice_response_recording">Recording (此区域正在监控中)</string>
+    <string name="node_mode_voice_response_custom">Custom</string>
+    <string name="node_mode_voice_custom_message_label">Custom message</string>
+    <string name="node_mode_voice_custom_message_hint">Type custom TTS message</string>
+    <string name="node_mode_voice_only_person">Only trigger on person</string>
+    <string name="node_mode_voice_cooldown_label">Cooldown</string>
+    <string name="node_mode_voice_cooldown_value">%1$ds</string>
+
+    <!-- ClawVision Alert Timeline -->
+    <string name="alert_history_title">告警历史</string>
+    <string name="alert_detail_title">事件详情</string>
+    <string name="alert_filter_label">过滤</string>
+    <string name="alert_filter_all">All</string>
+    <string name="alert_filter_person">Person</string>
+    <string name="alert_filter_vehicle">Vehicle</string>
+    <string name="alert_filter_animal">Animal</string>
+    <string name="alert_section_today">今天</string>
+    <string name="alert_section_yesterday">昨天</string>
+    <string name="alert_empty_state">暂无告警记录</string>
+    <string name="alert_type_label">类型</string>
+    <string name="alert_confidence_label">置信度</string>
+    <string name="alert_time_label">时间</string>
+    <string name="alert_location_label">GPS 位置</string>
+    <string name="alert_confidence_format">置信度 %1$d%%</string>
+    <string name="alert_thumbnail_desc">告警缩略图</string>
+    <string name="alert_share">分享</string>
+    <string name="alert_delete">删除</string>
+    <string name="alert_cancel">取消</string>
+    <string name="alert_delete_confirm">确认删除该事件？</string>
+    <string name="alert_deleted">已删除</string>
+    <string name="alert_not_found">事件不存在或已被删除</string>
+    <string name="alert_share_text">ClawVision 事件\n类型: %1$s\n置信度: %2$d%%\n时间: %3$s\n位置: %4$s</string>
 
 </resources>

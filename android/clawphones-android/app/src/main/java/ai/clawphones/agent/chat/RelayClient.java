@@ -308,7 +308,7 @@ public final class RelayClient {
         HttpUrl url = endpoint(path);
         Request.Builder builder = new Request.Builder()
             .url(url)
-            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
+            .post(RequestBody.create(JSON_MEDIA_TYPE, body.toString()))
             .addHeader("Accept", "application/json")
             .addHeader("Content-Type", "application/json");
         if (!TextUtils.isEmpty(token)) {

@@ -193,7 +193,13 @@ private struct DetectionFrameView: View {
         let normalizedRect: CGRect
 
         if isNormalized {
-            normalizedRect = boundingBox
+            // Vision normalized coordinates are bottom-left based; SwiftUI drawing is top-left based.
+            normalizedRect = CGRect(
+                x: boundingBox.origin.x,
+                y: 1 - boundingBox.origin.y - boundingBox.height,
+                width: boundingBox.width,
+                height: boundingBox.height
+            )
         } else {
             guard imageSize.width > 0, imageSize.height > 0 else { return nil }
             normalizedRect = CGRect(

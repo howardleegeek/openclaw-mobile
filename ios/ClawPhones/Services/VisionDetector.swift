@@ -8,6 +8,9 @@
 import CoreGraphics
 import Foundation
 import Vision
+#if canImport(UIKit)
+import UIKit
+#endif
 
 final class VisionDetector {
     struct Detection {
@@ -24,7 +27,6 @@ final class VisionDetector {
         case unknown
     }
 
-    private let processingQueue = DispatchQueue(label: "ai.clawphones.vision.detector", qos: .userInitiated)
     private let vehicleKeywords: [String] = [
         "car", "truck", "bus", "van", "vehicle", "motorcycle", "bike", "bicycle",
         "train", "tram", "subway", "taxi", "suv", "boat", "ship", "airplane", "aircraft", "helicopter"
@@ -44,12 +46,17 @@ final class VisionDetector {
     }
 
     func detect(in image: CGImage) async -> [Detection] {
-        await withCheckedContinuation { continuation in
-            processingQueue.async {
-                continuation.resume(returning: self.detectSync(in: image))
-            }
-        }
+        detectSync(in: image)
     }
+
+#if canImport(UIKit)
+    func detect(in image: UIImage) -> [Detection] {
+        guard let cgImage = image.cgImage else {
+            return []
+        }
+        return detectSync(in: cgImage)
+    }
+#endif
 
     private func detectSync(in image: CGImage) -> [Detection] {
         var detections: [Detection] = []
@@ -66,7 +73,6 @@ final class VisionDetector {
     @available(iOS 15.0, *)
     private func detectHumans(in image: CGImage) -> [Detection] {
         let request = VNDetectHumanRectanglesRequest()
-        request.maximumObservations = 32
 
         let handler = VNImageRequestHandler(cgImage: image, orientation: .up)
         do {

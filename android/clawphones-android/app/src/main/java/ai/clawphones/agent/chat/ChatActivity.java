@@ -124,6 +124,8 @@ public class ChatActivity extends AppCompatActivity {
     private static final int REQUEST_PICK_IMAGE = 7101;
     private static final int REQUEST_CAPTURE_IMAGE = 7102;
     private static final int REQUEST_PICK_FILE = 7103;
+    private static final int MENU_ITEM_COVERAGE_MAP = 9101;
+    private static final int MENU_ITEM_LOGOUT = 9102;
     private static final int MESSAGE_PAGE_SIZE = 80;
     private static final int PAGINATION_PREFETCH_TRIGGER = 6;
     private static final int MAX_PENDING_ATTACHMENTS = 3;
@@ -180,10 +182,20 @@ public class ChatActivity extends AppCompatActivity {
             toolbar.setNavigationIcon(android.R.drawable.ic_menu_revert);
             toolbar.setNavigationOnClickListener(v -> finish());
 
-            MenuItem logoutItem = toolbar.getMenu().add(getString(R.string.chat_menu_logout));
+            MenuItem coverageMapItem = toolbar.getMenu().add(0, MENU_ITEM_COVERAGE_MAP, 0, getString(R.string.chat_menu_coverage_map));
+            coverageMapItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+
+            MenuItem logoutItem = toolbar.getMenu().add(0, MENU_ITEM_LOGOUT, 1, getString(R.string.chat_menu_logout));
             logoutItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             toolbar.setOnMenuItemClickListener(item -> {
-                confirmLogout();
+                if (item.getItemId() == MENU_ITEM_COVERAGE_MAP) {
+                    startActivity(new Intent(this, CoverageMapActivity.class));
+                    return true;
+                }
+                if (item.getItemId() == MENU_ITEM_LOGOUT) {
+                    confirmLogout();
+                    return true;
+                }
                 return true;
             });
         }

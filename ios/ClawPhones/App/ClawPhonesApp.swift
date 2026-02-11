@@ -9,11 +9,13 @@ import SwiftUI
 @main
 struct ClawPhonesApp: App {
     @StateObject private var startupCoordinator = AppStartupCoordinator()
+    private let alertManager = AlertManager.shared
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .task {
+                    _ = alertManager
                     startupCoordinator.startDeferredInitialization()
                 }
         }

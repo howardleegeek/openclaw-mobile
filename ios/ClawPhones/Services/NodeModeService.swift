@@ -43,6 +43,7 @@ final class NodeModeService: NSObject, ObservableObject {
     @Published private(set) var framesCaptureded = 0
     @Published private(set) var uptimeSeconds = 0
     @Published private(set) var eventsDetected = 0
+    @Published private(set) var lastDetections: [VisionDetector.Detection] = []
     @Published private(set) var lastKnownLocation: CLLocation?
     @Published private(set) var isOnWiFi = false
     @Published private(set) var batteryLevel: Float = -1
@@ -63,12 +64,16 @@ final class NodeModeService: NSObject, ObservableObject {
 
     var onFrameCaptured: ((FramePayload) -> Void)?
     var onFrameReadyForUpload: ((FramePayload) -> Void)?
+    var onDetectionsUpdated: (([VisionDetector.Detection]) -> Void)?
 
     private let captureSession = AVCaptureSession()
     private let photoOutput = AVCapturePhotoOutput()
     private let locationManager = CLLocationManager()
     private let pathMonitor = NWPathMonitor()
     private let motionDetector = MotionDetector()
+    private let visionDetector = VisionDetector()
+    private let alertManager = AlertManager.shared
+    private let voiceResponder = VoiceResponder()
 
     private let sessionQueue = DispatchQueue(label: "ai.clawphones.node-mode.capture")
     private let pathMonitorQueue = DispatchQueue(label: "ai.clawphones.node-mode.network")
@@ -136,6 +141,7 @@ final class NodeModeService: NSObject, ObservableObject {
         lastStopReason = reason
         startDate = nil
         previousFrameImage = nil
+        lastDetections = []
 
         locationManager.stopUpdatingLocation()
         stopUptimeTimer()
@@ -339,6 +345,32 @@ final class NodeModeService: NSObject, ObservableObject {
         }
     }
 
+    private func bestAlertDetection(from detections: [VisionDetector.Detection]) -> VisionDetector.Detection? {
+        detections.max { lhs, rhs in
+            let leftRank = alertRank(for: lhs.type)
+            let rightRank = alertRank(for: rhs.type)
+            if leftRank != rightRank {
+                return leftRank < rightRank
+            }
+            return lhs.confidence < rhs.confidence
+        }
+    }
+
+    private func alertRank(for type: VisionDetector.DetectionType) -> Int {
+        switch type {
+        case .person:
+            return 4
+        case .vehicle:
+            return 3
+        case .animal:
+            return 2
+        case .package:
+            return 1
+        case .unknown:
+            return 0
+        }
+    }
+
     private enum NodeModeError: Error {
         case cameraUnavailable
         case cameraConfigurationFailed
@@ -370,13 +402,29 @@ extension NodeModeService: AVCapturePhotoCaptureDelegate {
         }
         previousFrameImage = currentImage
 
+        let detections = visionDetector.detect(in: currentImage)
+        let personDetected = detections.contains(where: { $0.type == .person })
+        if let detectionForVoice = bestAlertDetection(from: detections) {
+            let config = VoiceResponder.TriggerConfig.loadFromDefaults()
+            voiceResponder.respond(to: detectionForVoice, config: config)
+        }
+        if let detectionForAlert = bestAlertDetection(from: detections) {
+            alertManager.processDetection(
+                detectionForAlert,
+                frame: currentImage,
+                location: lastKnownLocation
+            )
+        }
+
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isRunning else { return }
 
             self.framesCaptureded += 1
-            if motionDetected {
+            if motionDetected || personDetected {
                 self.eventsDetected += 1
             }
+            self.lastDetections = detections
+            self.onDetectionsUpdated?(detections)
 
             let payload = FramePayload(
                 jpegData: jpegData,

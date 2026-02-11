@@ -518,6 +518,7 @@ private final class CoverageMapViewModel: NSObject, ObservableObject {
     }
 }
 
+@MainActor
 extension CoverageMapViewModel: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         startLocationUpdates()

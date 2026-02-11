@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -22,6 +23,7 @@ struct ContentView: View {
     @State private var isAppLocked = false
     @State private var shouldPromptForUnlock = false
     @State private var isAuthenticatingForUnlock = false
+    @State private var showNodeModeSheet = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -63,6 +65,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ClawPhonesAuthExpired"))) { _ in
             auth.refreshAuthState()
         }
+        .onReceive(NotificationCenter.default.publisher(for: AlertManager.openNodeModeNotification)) { _ in
+            showNodeModeSheet = true
+        }
         .onChange(of: scenePhase) { _, newPhase in
             handleScenePhaseChange(newPhase)
         }
@@ -78,6 +83,10 @@ struct ContentView: View {
             }
         }
         .onOpenURL { url in
+            if AlertManager.isNodeModeURL(url) {
+                showNodeModeSheet = true
+                return
+            }
             guard let payloadID = SharePayloadBridge.payloadID(from: url) else { return }
             selectedTab = .chat
             pendingSharedPayloadID = payloadID
@@ -94,6 +103,15 @@ struct ContentView: View {
 
             if let payloadID = SharePayloadBridge.latestPayloadID() {
                 pendingSharedPayloadID = payloadID
+            }
+
+            if AlertManager.shared.consumePendingNodeModeOpenRequest() {
+                showNodeModeSheet = true
+            }
+        }
+        .sheet(isPresented: $showNodeModeSheet) {
+            NavigationStack {
+                NodeModeLandingView()
             }
         }
         .overlay {
@@ -182,6 +200,82 @@ struct ContentView: View {
                     shouldPromptForUnlock = true
                 }
             }
+        }
+    }
+}
+
+private struct NodeModeLandingView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var history: [AlertManager.AlertEvent] = []
+
+    private static let eventTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }()
+
+    var body: some View {
+        List {
+            Section("告警历史") {
+                NavigationLink {
+                    AlertHistoryView()
+                } label: {
+                    Label("历史记录时间线", systemImage: "clock.arrow.circlepath")
+                }
+            }
+
+            Section("近期告警（最多 100 条）") {
+                if history.isEmpty {
+                    Text("暂无告警")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(history.enumerated()), id: \.offset) { _, event in
+                        HStack(spacing: 10) {
+                            if let data = event.thumbnail, let image = UIImage(data: data) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 60, height: 44)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("检测到 \(AlertManager.displayType(event.type))")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(Self.eventTimeFormatter.string(from: event.timestamp))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("置信度 \(Int((event.confidence * 100).rounded()))%")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+
+            Section("覆盖概览") {
+                CoverageMapView()
+                    .frame(height: 240)
+            }
+        }
+        .navigationTitle("Node Mode")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("关闭") { dismiss() }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    history = AlertManager.shared.recentHistory()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
+        .onAppear {
+            history = AlertManager.shared.recentHistory()
         }
     }
 }

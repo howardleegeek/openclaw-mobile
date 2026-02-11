@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -42,6 +43,7 @@ public class NodeModeActivity extends AppCompatActivity {
     private final String[] mFrameRateOptions = new String[]{"0.5", "1", "2"};
     private final String[] mQualityOptions = new String[]{"Low", "Medium", "High"};
     private final String[] mSensitivityOptions = new String[]{"Low", "Medium", "High"};
+    private final String[] mVoiceResponseOptions = new String[]{"deterrent", "welcome", "recording", "custom"};
 
     private SwitchMaterial mNodeSwitch;
     private View mCameraDot;
@@ -79,6 +81,14 @@ public class NodeModeActivity extends AppCompatActivity {
 
         Button settingsButton = findViewById(R.id.node_mode_settings_btn);
         settingsButton.setOnClickListener(v -> showSettingsDialog());
+        Button coverageButton = findViewById(R.id.node_mode_coverage_btn);
+        if (coverageButton != null) {
+            coverageButton.setOnClickListener(v -> startActivity(new Intent(this, CoverageMapActivity.class)));
+        }
+        Button historyButton = findViewById(R.id.node_mode_history_btn);
+        if (historyButton != null) {
+            historyButton.setOnClickListener(v -> startActivity(new Intent(this, AlertHistoryActivity.class)));
+        }
 
         mNodeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (mIgnoreSwitchChanges) return;
@@ -234,10 +244,24 @@ public class NodeModeActivity extends AppCompatActivity {
         SeekBar minBatterySeekBar = dialogView.findViewById(R.id.node_settings_min_battery_seek);
         TextView minBatteryValue = dialogView.findViewById(R.id.node_settings_min_battery_value);
         SwitchCompat wifiOnlySwitch = dialogView.findViewById(R.id.node_settings_wifi_only);
+        SwitchCompat voiceEnabledSwitch = dialogView.findViewById(R.id.node_settings_voice_enabled);
+        Spinner voiceResponseSpinner = dialogView.findViewById(R.id.node_settings_voice_response);
+        EditText voiceCustomMessageInput = dialogView.findViewById(R.id.node_settings_voice_custom_message);
+        SwitchCompat voiceOnlyPersonSwitch = dialogView.findViewById(R.id.node_settings_voice_only_person);
+        SeekBar voiceCooldownSeekBar = dialogView.findViewById(R.id.node_settings_voice_cooldown_seek);
+        TextView voiceCooldownValue = dialogView.findViewById(R.id.node_settings_voice_cooldown_value);
+
+        String[] voiceResponseLabels = new String[]{
+            getString(R.string.node_mode_voice_response_deterrent),
+            getString(R.string.node_mode_voice_response_welcome),
+            getString(R.string.node_mode_voice_response_recording),
+            getString(R.string.node_mode_voice_response_custom)
+        };
 
         bindSpinner(frameRateSpinner, mFrameRateOptions);
         bindSpinner(jpegQualitySpinner, mQualityOptions);
         bindSpinner(motionSensitivitySpinner, mSensitivityOptions);
+        bindSpinner(voiceResponseSpinner, voiceResponseLabels);
 
         SharedPreferences prefs = getSettings();
         String relayUrl = prefs.getString(NodeModeService.PREF_RELAY_URL, NodeModeService.DEFAULT_RELAY_URL);
@@ -249,11 +273,32 @@ public class NodeModeActivity extends AppCompatActivity {
         );
         int minBattery = prefs.getInt(NodeModeService.PREF_MIN_BATTERY, NodeModeService.DEFAULT_MIN_BATTERY);
         boolean wifiOnly = prefs.getBoolean(NodeModeService.PREF_WIFI_ONLY, NodeModeService.DEFAULT_WIFI_ONLY);
+        boolean voiceEnabled = prefs.getBoolean(
+            NodeModeService.PREF_VOICE_ENABLED,
+            NodeModeService.DEFAULT_VOICE_ENABLED
+        );
+        String voiceResponseType = prefs.getString(
+            NodeModeService.PREF_VOICE_RESPONSE_TYPE,
+            NodeModeService.DEFAULT_VOICE_RESPONSE_TYPE
+        );
+        String voiceCustomMessage = prefs.getString(
+            NodeModeService.PREF_VOICE_CUSTOM_MESSAGE,
+            NodeModeService.DEFAULT_VOICE_CUSTOM_MESSAGE
+        );
+        boolean voiceOnlyPerson = prefs.getBoolean(
+            NodeModeService.PREF_VOICE_ONLY_PERSON,
+            NodeModeService.DEFAULT_VOICE_ONLY_PERSON
+        );
+        int voiceCooldownSeconds = prefs.getInt(
+            NodeModeService.PREF_VOICE_COOLDOWN_SECONDS,
+            NodeModeService.DEFAULT_VOICE_COOLDOWN_SECONDS
+        );
 
         relayUrlInput.setText(relayUrl);
         selectSpinnerValue(frameRateSpinner, mFrameRateOptions, frameRate);
         selectSpinnerValue(jpegQualitySpinner, mQualityOptions, jpegQuality);
         selectSpinnerValue(motionSensitivitySpinner, mSensitivityOptions, motionSensitivity);
+        selectSpinnerValue(voiceResponseSpinner, mVoiceResponseOptions, voiceResponseType);
 
         minBattery = clamp(minBattery, 10, 50);
         minBatterySeekBar.setMax(40); // range 10-50
@@ -274,6 +319,60 @@ public class NodeModeActivity extends AppCompatActivity {
         });
 
         wifiOnlySwitch.setChecked(wifiOnly);
+        voiceEnabledSwitch.setChecked(voiceEnabled);
+        voiceCustomMessageInput.setText(voiceCustomMessage == null ? "" : voiceCustomMessage);
+        voiceOnlyPersonSwitch.setChecked(voiceOnlyPerson);
+
+        voiceCooldownSeconds = clamp(voiceCooldownSeconds, 10, 300);
+        voiceCooldownSeekBar.setMax(290); // 10-300
+        voiceCooldownSeekBar.setProgress(voiceCooldownSeconds - 10);
+        voiceCooldownValue.setText(
+            getString(R.string.node_mode_voice_cooldown_value, voiceCooldownSeconds)
+        );
+        voiceCooldownSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = progress + 10;
+                voiceCooldownValue.setText(getString(R.string.node_mode_voice_cooldown_value, value));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) { }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) { }
+        });
+
+        Runnable updateVoiceCustomState = () -> {
+            int selected = safeSpinnerIndex(voiceResponseSpinner, mVoiceResponseOptions.length);
+            boolean isCustom = "custom".equalsIgnoreCase(mVoiceResponseOptions[selected]);
+            boolean enabled = voiceEnabledSwitch.isChecked() && isCustom;
+            voiceCustomMessageInput.setEnabled(enabled);
+            voiceCustomMessageInput.setAlpha(enabled ? 1f : 0.5f);
+        };
+
+        Runnable updateVoiceSectionState = () -> {
+            boolean enabled = voiceEnabledSwitch.isChecked();
+            voiceResponseSpinner.setEnabled(enabled);
+            voiceOnlyPersonSwitch.setEnabled(enabled);
+            voiceCooldownSeekBar.setEnabled(enabled);
+            voiceCooldownValue.setAlpha(enabled ? 1f : 0.6f);
+            updateVoiceCustomState.run();
+        };
+
+        voiceEnabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> updateVoiceSectionState.run());
+        voiceResponseSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                updateVoiceCustomState.run();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                updateVoiceCustomState.run();
+            }
+        });
+        updateVoiceSectionState.run();
 
         new AlertDialog.Builder(this)
             .setTitle(R.string.node_mode_settings_title)
@@ -285,9 +384,10 @@ public class NodeModeActivity extends AppCompatActivity {
                     newRelayUrl = NodeModeService.DEFAULT_RELAY_URL;
                 }
 
-                int selectedFrameRate = frameRateSpinner.getSelectedItemPosition();
-                int selectedJpegQuality = jpegQualitySpinner.getSelectedItemPosition();
-                int selectedMotionSensitivity = motionSensitivitySpinner.getSelectedItemPosition();
+                int selectedFrameRate = safeSpinnerIndex(frameRateSpinner, mFrameRateOptions.length);
+                int selectedJpegQuality = safeSpinnerIndex(jpegQualitySpinner, mQualityOptions.length);
+                int selectedMotionSensitivity = safeSpinnerIndex(motionSensitivitySpinner, mSensitivityOptions.length);
+                int selectedVoiceResponse = safeSpinnerIndex(voiceResponseSpinner, mVoiceResponseOptions.length);
 
                 getSettings().edit()
                     .putString(NodeModeService.PREF_RELAY_URL, newRelayUrl)
@@ -296,6 +396,11 @@ public class NodeModeActivity extends AppCompatActivity {
                     .putString(NodeModeService.PREF_MOTION_SENSITIVITY, mSensitivityOptions[selectedMotionSensitivity])
                     .putInt(NodeModeService.PREF_MIN_BATTERY, minBatterySeekBar.getProgress() + 10)
                     .putBoolean(NodeModeService.PREF_WIFI_ONLY, wifiOnlySwitch.isChecked())
+                    .putBoolean(NodeModeService.PREF_VOICE_ENABLED, voiceEnabledSwitch.isChecked())
+                    .putString(NodeModeService.PREF_VOICE_RESPONSE_TYPE, mVoiceResponseOptions[selectedVoiceResponse])
+                    .putString(NodeModeService.PREF_VOICE_CUSTOM_MESSAGE, safeTrim(voiceCustomMessageInput.getText().toString()))
+                    .putBoolean(NodeModeService.PREF_VOICE_ONLY_PERSON, voiceOnlyPersonSwitch.isChecked())
+                    .putInt(NodeModeService.PREF_VOICE_COOLDOWN_SECONDS, voiceCooldownSeekBar.getProgress() + 10)
                     .apply();
 
                 toast(getString(R.string.node_mode_settings_saved));
@@ -328,6 +433,13 @@ public class NodeModeActivity extends AppCompatActivity {
             }
         }
         spinner.setSelection(0);
+    }
+
+    private int safeSpinnerIndex(@NonNull Spinner spinner, int optionLength) {
+        if (optionLength <= 0) return 0;
+        int selected = spinner.getSelectedItemPosition();
+        if (selected < 0 || selected >= optionLength) return 0;
+        return selected;
     }
 
     private void requestNodePermissions() {

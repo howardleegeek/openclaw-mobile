@@ -102,5 +102,94 @@
             android:text="@string/node_mode_settings_wifi_only"
             android:textSize="14sp" />
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="14dp"
+            android:background="@color/clawphones_surface" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/node_mode_voice_section_title"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/node_settings_voice_enabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/node_mode_voice_enabled"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/node_mode_voice_response_label"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/node_settings_voice_response"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/node_mode_voice_custom_message_label"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/node_settings_voice_custom_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/clawphones_input_bg"
+            android:hint="@string/node_mode_voice_custom_message_hint"
+            android:inputType="textCapSentences|textMultiLine"
+            android:maxLength="200"
+            android:minLines="2"
+            android:padding="12dp"
+            android:textColor="@color/clawphones_on_background"
+            android:textColorHint="@color/clawphones_secondary_text" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/node_settings_voice_only_person"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/node_mode_voice_only_person"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/node_mode_voice_cooldown_label"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/node_settings_voice_cooldown_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="60s"
+            android:textColor="@color/clawphones_accent"
+            android:textSize="13sp" />
+
+        <SeekBar
+            android:id="@+id/node_settings_voice_cooldown_seek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp" />
+
     </LinearLayout>
 </ScrollView>

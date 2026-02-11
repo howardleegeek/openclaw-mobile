@@ -26,6 +26,7 @@
 		7B5A22A66466928C9A83C19F /* ClawPhonesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA521445573D71EA58448AA /* ClawPhonesApp.swift */; };
 		7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */; };
 		7CF92F190A301C0B0D50AE01 /* AlertEventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF92F190A301C0B0D50AE02 /* AlertEventStore.swift */; };
+		C3AB1E9F20F04B7EAA000001 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3AB1E9F20F04B7EAA000002 /* AlertManager.swift */; };
 		7CF92F190A301C0B0D50AE03 /* AlertDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF92F190A301C0B0D50AE04 /* AlertDetailView.swift */; };
 		7CF92F190A301C0B0D50AE05 /* AlertHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF92F190A301C0B0D50AE06 /* AlertHistoryView.swift */; };
 		7CF92F190A301C0B0D50AE07 /* AlertEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF92F190A301C0B0D50AE08 /* AlertEvent.swift */; };
@@ -43,6 +44,8 @@
 		C8A11F59D2E84B0DA7F39002 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A11F59D2E84B0DA7F39001 /* AnalyticsService.swift */; };
 		B1D0E0C1A2B3000000000003 /* MotionDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0E0C1A2B3000000000001 /* MotionDetector.swift */; };
 		B1D0E0C1A2B3000000000004 /* NodeModeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0E0C1A2B3000000000002 /* NodeModeService.swift */; };
+		B1D0E0C1A2B3000000000007 /* VoiceResponder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0E0C1A2B3000000000005 /* VoiceResponder.swift */; };
+		B1D0E0C1A2B3000000000008 /* NodeModeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0E0C1A2B3000000000006 /* NodeModeSettingsView.swift */; };
 		B6E77F6C59C34F4A9E80B341 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D64C35235EE4A72B4BCAC3D /* OnboardingView.swift */; };
 		B909E20879439BD44BC7D68E /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9BE935A3A036729805815B /* Message.swift */; };
 		BF0C057F4C1EB0639041006A /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 529105A52C7F000A0054A75F /* ChatInputBar.swift */; };
@@ -62,6 +65,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A5B6C7D80100000000000001;
 			remoteInfo = ClawPhonesShare;
+		};
+		C1AA1010D5E34A0090B10001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 101EB9685E73B1F469ABFA35 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E0AA911DA650DD5907F19F75;
+			remoteInfo = ClawPhones;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -98,6 +108,7 @@
 		7671A61CD7494469A0232FFC /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		7BEB09C2D39E49319063F40F /* StreamChunk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamChunk.swift; sourceTree = "<group>"; };
 		7CF92F190A301C0B0D50AE02 /* AlertEventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertEventStore.swift; sourceTree = "<group>"; };
+		C3AB1E9F20F04B7EAA000002 /* AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertManager.swift; sourceTree = "<group>"; };
 		7CF92F190A301C0B0D50AE04 /* AlertDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertDetailView.swift; sourceTree = "<group>"; };
 		7CF92F190A301C0B0D50AE06 /* AlertHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertHistoryView.swift; sourceTree = "<group>"; };
 		7CF92F190A301C0B0D50AE08 /* AlertEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertEvent.swift; sourceTree = "<group>"; };
@@ -116,9 +127,16 @@
 			C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporter.swift; sourceTree = "<group>"; };
 			DAA521445573D71EA58448AA /* ClawPhonesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawPhonesApp.swift; sourceTree = "<group>"; };
 			B8E2F5A1D0324B8C9F4E6A21 /* CoverageMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverageMapView.swift; sourceTree = "<group>"; };
+		C1AA1020D5E34A0090B10001 /* VisionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionDetector.swift; sourceTree = "<group>"; };
+		C1AA1021D5E34A0090B10001 /* ClawPhonesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawPhonesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1AA1022D5E34A0090B10001 /* VisionDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionDetectorTests.swift; sourceTree = "<group>"; };
+		C1AA1023D5E34A0090B10001 /* person_sample.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = person_sample.jpg; sourceTree = "<group>"; };
+		C1AA1024D5E34A0090B10001 /* animal_sample.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = animal_sample.jpg; sourceTree = "<group>"; };
 			DFEA999748FD4880AE76B25A /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		B1D0E0C1A2B3000000000001 /* MotionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionDetector.swift; sourceTree = "<group>"; };
 		B1D0E0C1A2B3000000000002 /* NodeModeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeModeService.swift; sourceTree = "<group>"; };
+		B1D0E0C1A2B3000000000005 /* VoiceResponder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceResponder.swift; sourceTree = "<group>"; };
+		B1D0E0C1A2B3000000000006 /* NodeModeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeModeSettingsView.swift; sourceTree = "<group>"; };
 		E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceConfig.swift; sourceTree = "<group>"; };
 		E958567AAFAC4CB4B2935E2F /* PlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanView.swift; sourceTree = "<group>"; };
 		F0D5888BD4C147DE81C8114D /* ThinkingIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingIndicator.swift; sourceTree = "<group>"; };
@@ -138,6 +156,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A3B4C5D60100000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1AA1030D5E34A0090B10001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -169,10 +194,29 @@
 			isa = PBXGroup;
 			children = (
 				DCCEDC410DB935B9E52FAE3E /* ClawPhones */,
+				C1AA1040D5E34A0090B10001 /* ClawPhonesTests */,
 				A4B5C6D70100000000000001 /* ClawPhonesShare */,
 				0B03332A480319ACB36EF24D /* Frameworks */,
 				8C1969BC5989E871C77EB3CC /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		C1AA1040D5E34A0090B10001 /* ClawPhonesTests */ = {
+			isa = PBXGroup;
+			children = (
+				C1AA1022D5E34A0090B10001 /* VisionDetectorTests.swift */,
+				C1AA1041D5E34A0090B10001 /* Fixtures */,
+			);
+			path = ClawPhonesTests;
+			sourceTree = "<group>";
+		};
+		C1AA1041D5E34A0090B10001 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				C1AA1023D5E34A0090B10001 /* person_sample.jpg */,
+				C1AA1024D5E34A0090B10001 /* animal_sample.jpg */,
+			);
+			path = Fixtures;
 			sourceTree = "<group>";
 		};
 		3F30F51DD64BBFEA6B617FBB /* App */ = {
@@ -200,6 +244,7 @@
 			children = (
 				97D8E07F8EC6E306984E5477 /* ClawPhones.app */,
 				A2B3C4D50100000000000001 /* ClawPhonesShare.appex */,
+				C1AA1021D5E34A0090B10001 /* ClawPhonesTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -209,13 +254,16 @@
 				children = (
 					B1D0E0C1A2B3000000000002 /* NodeModeService.swift */,
 					B1D0E0C1A2B3000000000001 /* MotionDetector.swift */,
+					B1D0E0C1A2B3000000000005 /* VoiceResponder.swift */,
 					E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */,
 					9FBA20A8CB73F2866E2F8A02 /* BiometricAuthService.swift */,
 					F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */,
 					F978F2F0D2B85014470EDB20 /* RelayClient.swift */,
 					5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */,
+					C1AA1020D5E34A0090B10001 /* VisionDetector.swift */,
 					C8A11F59D2E84B0DA7F39001 /* AnalyticsService.swift */,
 					7CF92F190A301C0B0D50AE02 /* AlertEventStore.swift */,
+					C3AB1E9F20F04B7EAA000002 /* AlertManager.swift */,
 				F4B2C7939D4E41A1986A23C5 /* SpeechRecognizer.swift */,
 				C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */,
 				A2B3C4D50100000000000006 /* SharePayloadBridge.swift */,
@@ -245,8 +293,9 @@
 					B8E2F5A1D0324B8C9F4E6A21 /* CoverageMapView.swift */,
 					529105A52C7F000A0054A75F /* ChatInputBar.swift */,
 					3AC5AE07859E9065699CB5FE /* ConversationListView.swift */,
-				7671A61CD7494469A0232FFC /* LoginView.swift */,
+					7671A61CD7494469A0232FFC /* LoginView.swift */,
 				575C0A74873CA4D4C6F87F30 /* MessageRow.swift */,
+				B1D0E0C1A2B3000000000006 /* NodeModeSettingsView.swift */,
 				5D64C35235EE4A72B4BCAC3D /* OnboardingView.swift */,
 				E958567AAFAC4CB4B2935E2F /* PlanView.swift */,
 				1B8D12A6636D41058D5DB456 /* SettingsView.swift */,
@@ -319,6 +368,24 @@
 			productReference = 97D8E07F8EC6E306984E5477 /* ClawPhones.app */;
 			productType = "com.apple.product-type.application";
 		};
+		C1AA1050D5E34A0090B10001 /* ClawPhonesTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1AA1080D5E34A0090B10001 /* Build configuration list for PBXNativeTarget "ClawPhonesTests" */;
+			buildPhases = (
+				C1AA1060D5E34A0090B10001 /* Sources */,
+				C1AA1030D5E34A0090B10001 /* Frameworks */,
+				C1AA1070D5E34A0090B10001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C1AA1090D5E34A0090B10001 /* PBXTargetDependency */,
+			);
+			name = ClawPhonesTests;
+			productName = ClawPhonesTests;
+			productReference = C1AA1021D5E34A0090B10001 /* ClawPhonesTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -351,6 +418,7 @@
 			targets = (
 				E0AA911DA650DD5907F19F75 /* ClawPhones */,
 				A5B6C7D80100000000000001 /* ClawPhonesShare */,
+				C1AA1050D5E34A0090B10001 /* ClawPhonesTests */,
 			);
 		};
 /* End PBXProject section */
@@ -370,6 +438,15 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1AA1070D5E34A0090B10001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1AA1003D5E34A0090B10001 /* person_sample.jpg in Resources */,
+				C1AA1004D5E34A0090B10001 /* animal_sample.jpg in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -395,6 +472,7 @@
 				BF0C057F4C1EB0639041006A /* ChatInputBar.swift in Sources */,
 				6B1685B1F341B6314DDB77A5 /* ConversationListView.swift in Sources */,
 				8485D758DFF24CE48C63F490 /* SettingsView.swift in Sources */,
+				B1D0E0C1A2B3000000000008 /* NodeModeSettingsView.swift in Sources */,
 				E0824FE9B448855B1D60031B /* SetupView.swift in Sources */,
 				E95210B60420431CA5A0F782 /* PlanView.swift in Sources */,
 				C39C68C22C5D4627BE6656AB /* AIConfigView.swift in Sources */,
@@ -406,12 +484,15 @@
 						53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */,
 						53E6CFE2A6FB59CB700453BC /* RelayClient.swift in Sources */,
 						7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */,
+						C1AA1001D5E34A0090B10001 /* VisionDetector.swift in Sources */,
 					9FBA20A8CB73F2866E2F8A01 /* BiometricAuthService.swift in Sources */,
 					A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */,
 					C8A11F59D2E84B0DA7F39002 /* AnalyticsService.swift in Sources */,
 					B1D0E0C1A2B3000000000004 /* NodeModeService.swift in Sources */,
 					B1D0E0C1A2B3000000000003 /* MotionDetector.swift in Sources */,
+					B1D0E0C1A2B3000000000007 /* VoiceResponder.swift in Sources */,
 					7CF92F190A301C0B0D50AE01 /* AlertEventStore.swift in Sources */,
+					C3AB1E9F20F04B7EAA000001 /* AlertManager.swift in Sources */,
 					A1D8B6377C8E4A5EA2F96B31 /* SpeechRecognizer.swift in Sources */,
 				D5A2F823B2D34E6C9EAB1C2D /* CrashReporter.swift in Sources */,
 				A1B2C3D40100000000000004 /* SharePayloadBridge.swift in Sources */,
@@ -428,6 +509,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C1AA1060D5E34A0090B10001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1AA1002D5E34A0090B10001 /* VisionDetectorTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -435,6 +524,11 @@
 			isa = PBXTargetDependency;
 			target = A5B6C7D80100000000000001 /* ClawPhonesShare */;
 			targetProxy = A7B8C9DA0100000000000001 /* PBXContainerItemProxy */;
+		};
+		C1AA1090D5E34A0090B10001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E0AA911DA650DD5907F19F75 /* ClawPhones */;
+			targetProxy = C1AA1010D5E34A0090B10001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -511,6 +605,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = W9ZF4RC587;
+				ENABLE_TESTABILITY = YES;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = ClawPhones/Config/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -526,6 +621,53 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		C1AA10A0D5E34A0090B10001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W9ZF4RC587;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/Frameworks",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.clawphones.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClawPhones.app/ClawPhones";
+			};
+			name = Debug;
+		};
+		C1AA10A1D5E34A0090B10001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W9ZF4RC587;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/Frameworks",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.clawphones.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClawPhones.app/ClawPhones";
+			};
+			name = Release;
 		};
 		EA172FF13D5A375B78E9B9B3 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -591,6 +733,15 @@
 			buildConfigurations = (
 				A9B0C1D20100000000000001 /* Debug */,
 				A9B0C1D20100000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C1AA1080D5E34A0090B10001 /* Build configuration list for PBXNativeTarget "ClawPhonesTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1AA10A0D5E34A0090B10001 /* Debug */,
+				C1AA10A1D5E34A0090B10001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

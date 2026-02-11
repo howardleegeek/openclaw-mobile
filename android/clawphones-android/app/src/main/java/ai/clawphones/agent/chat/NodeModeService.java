@@ -11,6 +11,11 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Rect;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -22,6 +27,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.text.TextUtils;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -66,6 +72,11 @@ public class NodeModeService extends Service {
     public static final String PREF_MOTION_SENSITIVITY = "motion_sensitivity";
     public static final String PREF_MIN_BATTERY = "min_battery";
     public static final String PREF_WIFI_ONLY = "wifi_only";
+    public static final String PREF_VOICE_ENABLED = "voice_enabled";
+    public static final String PREF_VOICE_RESPONSE_TYPE = "voice_response_type";
+    public static final String PREF_VOICE_CUSTOM_MESSAGE = "voice_custom_message";
+    public static final String PREF_VOICE_ONLY_PERSON = "voice_only_person";
+    public static final String PREF_VOICE_COOLDOWN_SECONDS = "voice_cooldown_seconds";
 
     public static final String DEFAULT_RELAY_URL = "https://relay.oysterlabs.ai/upload";
     public static final String DEFAULT_FRAME_RATE = "1";
@@ -73,6 +84,11 @@ public class NodeModeService extends Service {
     public static final String DEFAULT_MOTION_SENSITIVITY = "Medium";
     public static final int DEFAULT_MIN_BATTERY = 20;
     public static final boolean DEFAULT_WIFI_ONLY = true;
+    public static final boolean DEFAULT_VOICE_ENABLED = false;
+    public static final String DEFAULT_VOICE_RESPONSE_TYPE = "recording";
+    public static final String DEFAULT_VOICE_CUSTOM_MESSAGE = "";
+    public static final boolean DEFAULT_VOICE_ONLY_PERSON = true;
+    public static final int DEFAULT_VOICE_COOLDOWN_SECONDS = 60;
 
     private static final String NOTIFICATION_CHANNEL_ID = "node_mode_service";
     private static final int NOTIFICATION_ID = 2101;
@@ -80,6 +96,15 @@ public class NodeModeService extends Service {
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final Random mRandom = new Random();
+    private final String[] mSyntheticAlertTypes = new String[]{
+        VisionDetector.TYPE_PERSON,
+        VisionDetector.TYPE_VEHICLE,
+        VisionDetector.TYPE_ANIMAL,
+        VisionDetector.TYPE_PACKAGE
+    };
+
+    private AlertManager mAlertManager;
+    private VoiceResponder mVoiceResponder;
 
     private boolean mRunning = false;
     private long mStartedAtElapsedMs = 0L;
@@ -103,6 +128,8 @@ public class NodeModeService extends Service {
         super.onCreate();
         ensureDefaults();
         ensureNotificationChannel();
+        mAlertManager = new AlertManager(this);
+        mVoiceResponder = new VoiceResponder(this);
     }
 
     @Override
@@ -130,6 +157,10 @@ public class NodeModeService extends Service {
     public void onDestroy() {
         mHandler.removeCallbacksAndMessages(null);
         mRunning = false;
+        if (mVoiceResponder != null) {
+            mVoiceResponder.shutdown();
+            mVoiceResponder = null;
+        }
         broadcastStatus();
         super.onDestroy();
     }
@@ -190,9 +221,59 @@ public class NodeModeService extends Service {
             for (int i = 0; i < newFrames; i++) {
                 if (mRandom.nextFloat() < eventProbability) {
                     mEventsDetected++;
+                    emitSyntheticAlert();
                 }
             }
         }
+    }
+
+    private void emitSyntheticAlert() {
+        if (mAlertManager == null) return;
+
+        String type = mSyntheticAlertTypes[mRandom.nextInt(mSyntheticAlertTypes.length)];
+        float confidence = 0.60f + (mRandom.nextFloat() * 0.35f);
+        Rect box = new Rect(48, 32, 272, 156);
+        VisionDetector.Detection detection = new VisionDetector.Detection(type, confidence, box);
+        maybeSpeakForDetection(detection);
+        Bitmap thumbnail = buildSyntheticThumbnail(type, confidence);
+        try {
+            mAlertManager.processDetection(detection, thumbnail);
+        } finally {
+            thumbnail.recycle();
+        }
+    }
+
+    private Bitmap buildSyntheticThumbnail(String type, float confidence) {
+        Bitmap bitmap = Bitmap.createBitmap(320, 180, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+
+        int background = Color.rgb(24, 24, 28);
+        int accent = alertTypeColor(type);
+        canvas.drawColor(background);
+
+        Paint blockPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        blockPaint.setColor(accent);
+        canvas.drawRoundRect(24f, 24f, 296f, 156f, 20f, 20f, blockPaint);
+
+        Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        textPaint.setColor(Color.WHITE);
+        textPaint.setTextSize(30f);
+        textPaint.setFakeBoldText(true);
+        canvas.drawText(type.toUpperCase(Locale.US), 42f, 90f, textPaint);
+
+        textPaint.setTextSize(22f);
+        textPaint.setFakeBoldText(false);
+        String confidenceText = "conf " + Math.round(confidence * 100f) + "%";
+        canvas.drawText(confidenceText, 42f, 126f, textPaint);
+
+        return bitmap;
+    }
+
+    private int alertTypeColor(String type) {
+        if (VisionDetector.TYPE_PERSON.equals(type)) return Color.rgb(239, 83, 80);
+        if (VisionDetector.TYPE_VEHICLE.equals(type)) return Color.rgb(66, 165, 245);
+        if (VisionDetector.TYPE_ANIMAL.equals(type)) return Color.rgb(102, 187, 106);
+        return Color.rgb(255, 167, 38);
     }
 
     private void updateNotification() {
@@ -257,16 +338,63 @@ public class NodeModeService extends Service {
 
     private void ensureDefaults() {
         SharedPreferences prefs = getSettings();
+        SharedPreferences.Editor editor = prefs.edit();
+        boolean changed = false;
+
         if (!prefs.contains(PREF_RELAY_URL)) {
-            prefs.edit()
-                .putString(PREF_RELAY_URL, DEFAULT_RELAY_URL)
-                .putString(PREF_FRAME_RATE, DEFAULT_FRAME_RATE)
-                .putString(PREF_JPEG_QUALITY, DEFAULT_JPEG_QUALITY)
-                .putString(PREF_MOTION_SENSITIVITY, DEFAULT_MOTION_SENSITIVITY)
-                .putInt(PREF_MIN_BATTERY, DEFAULT_MIN_BATTERY)
-                .putBoolean(PREF_WIFI_ONLY, DEFAULT_WIFI_ONLY)
-                .apply();
+            editor.putString(PREF_RELAY_URL, DEFAULT_RELAY_URL);
+            changed = true;
         }
+        if (!prefs.contains(PREF_FRAME_RATE)) {
+            editor.putString(PREF_FRAME_RATE, DEFAULT_FRAME_RATE);
+            changed = true;
+        }
+        if (!prefs.contains(PREF_JPEG_QUALITY)) {
+            editor.putString(PREF_JPEG_QUALITY, DEFAULT_JPEG_QUALITY);
+            changed = true;
+        }
+        if (!prefs.contains(PREF_MOTION_SENSITIVITY)) {
+            editor.putString(PREF_MOTION_SENSITIVITY, DEFAULT_MOTION_SENSITIVITY);
+            changed = true;
+        }
+        if (!prefs.contains(PREF_MIN_BATTERY)) {
+            editor.putInt(PREF_MIN_BATTERY, DEFAULT_MIN_BATTERY);
+            changed = true;
+        }
+        if (!prefs.contains(PREF_WIFI_ONLY)) {
+            editor.putBoolean(PREF_WIFI_ONLY, DEFAULT_WIFI_ONLY);
+            changed = true;
+        }
+        if (!prefs.contains(PREF_VOICE_ENABLED)) {
+            editor.putBoolean(PREF_VOICE_ENABLED, DEFAULT_VOICE_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(PREF_VOICE_RESPONSE_TYPE)) {
+            editor.putString(PREF_VOICE_RESPONSE_TYPE, DEFAULT_VOICE_RESPONSE_TYPE);
+            changed = true;
+        }
+        if (!prefs.contains(PREF_VOICE_CUSTOM_MESSAGE)) {
+            editor.putString(PREF_VOICE_CUSTOM_MESSAGE, DEFAULT_VOICE_CUSTOM_MESSAGE);
+            changed = true;
+        }
+        if (!prefs.contains(PREF_VOICE_ONLY_PERSON)) {
+            editor.putBoolean(PREF_VOICE_ONLY_PERSON, DEFAULT_VOICE_ONLY_PERSON);
+            changed = true;
+        }
+        if (!prefs.contains(PREF_VOICE_COOLDOWN_SECONDS)) {
+            editor.putInt(PREF_VOICE_COOLDOWN_SECONDS, DEFAULT_VOICE_COOLDOWN_SECONDS);
+            changed = true;
+        }
+
+        if (changed) {
+            editor.apply();
+        }
+    }
+
+    private void maybeSpeakForDetection(@NonNull VisionDetector.Detection detection) {
+        if (mVoiceResponder == null) return;
+        VoiceResponder.TriggerConfig config = VoiceResponder.TriggerConfig.fromPreferences(getSettings());
+        mVoiceResponder.respond(detection, config);
     }
 
     private void broadcastStatus() {

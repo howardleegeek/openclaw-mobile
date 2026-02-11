@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var showDeleteAccountPrompt: Bool = false
     @State private var deleteAccountConfirmText: String = ""
     @State private var biometryInfo = BiometricAuthService.shared.currentBiometryInfo()
+    @State private var nodeVoiceConfig = VoiceResponder.TriggerConfig.loadFromDefaults()
 
     var body: some View {
         Form {
@@ -84,6 +85,19 @@ struct SettingsView: View {
                         Text("当前人设")
                         Spacer()
                         Text(personaSummary(viewModel.aiConfig.persona))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section("Node Mode") {
+                NavigationLink {
+                    NodeModeSettingsView()
+                } label: {
+                    HStack {
+                        Text("Voice Response")
+                        Spacer()
+                        Text(voiceResponseSummary(nodeVoiceConfig))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -179,6 +193,7 @@ struct SettingsView: View {
         }
         .onAppear {
             refreshBiometryInfo()
+            nodeVoiceConfig = VoiceResponder.TriggerConfig.loadFromDefaults()
         }
         .overlay {
             if viewModel.isLoading {
@@ -315,6 +330,13 @@ struct SettingsView: View {
         if !info.isAvailable {
             biometricLockEnabled = false
         }
+    }
+
+    private func voiceResponseSummary(_ config: VoiceResponder.TriggerConfig) -> String {
+        if !config.enabled {
+            return "关闭"
+        }
+        return config.responseType.displayName
     }
 }
 

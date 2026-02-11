@@ -117,7 +117,7 @@
         android:layout_marginTop="28dp"
         app:cardBackgroundColor="@color/clawphones_surface"
         app:cardCornerRadius="14dp"
-        app:layout_constraintBottom_toTopOf="@id/node_mode_settings_btn"
+        app:layout_constraintBottom_toTopOf="@id/node_mode_coverage_btn"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/node_mode_status_row"
@@ -211,6 +211,32 @@
 
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
+
+    <Button
+        android:id="@+id/node_mode_coverage_btn"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/clawphones_button_outline_bg"
+        android:text="@string/node_mode_coverage_button"
+        android:textAllCaps="false"
+        android:textColor="@color/clawphones_accent"
+        app:layout_constraintBottom_toTopOf="@id/node_mode_history_btn"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <Button
+        android:id="@+id/node_mode_history_btn"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/clawphones_button_outline_bg"
+        android:text="@string/node_mode_history_button"
+        android:textAllCaps="false"
+        android:textColor="@color/clawphones_accent"
+        app:layout_constraintBottom_toTopOf="@id/node_mode_settings_btn"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
     <Button
         android:id="@+id/node_mode_settings_btn"

@@ -84,6 +84,29 @@ actor AlertEventStore {
         cleanupOrphanedThumbnails(validIDs: Set(pruned.map(\.id)))
     }
 
+    func addEvent(
+        type: String,
+        confidence: Float,
+        timestamp: Date,
+        latitude: Double,
+        longitude: Double,
+        thumbnailData: Data?,
+        boundingBox: CGRect?
+    ) {
+        addEvent(
+            AlertEvent(
+                id: UUID(),
+                type: type,
+                confidence: confidence,
+                timestamp: timestamp,
+                latitude: latitude,
+                longitude: longitude,
+                thumbnailData: thumbnailData,
+                boundingBox: boundingBox
+            )
+        )
+    }
+
     func deleteEvent(id: UUID) {
         ensureDirectoriesIfNeeded()
 

@@ -50,3 +50,11 @@ node_modules/
 tmp-relay/
 server.testable.mjs
 package-lock.json
+ios/.deriveddata/
+ios/.module-cache/
+ios/build-s12-5/
+.tmp-home/
+ios/.deriveddata/
+ios/.module-cache/
+ios/build-s12-5/
+.tmp-home/
