@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var auth: AuthViewModel
@@ -18,6 +19,9 @@ struct SettingsView: View {
 
     @State private var showConfirmDeleteAll: Bool = false
     @State private var showConfirmLogout: Bool = false
+    @State private var exportShareItem: ExportShareItem?
+    @State private var showDeleteAccountPrompt: Bool = false
+    @State private var deleteAccountConfirmText: String = ""
 
     var body: some View {
         Form {
@@ -98,8 +102,47 @@ struct SettingsView: View {
                     showChangePassword = true
                 }
 
+                Button {
+                    Task {
+                        if let fileURL = await viewModel.exportMyData() {
+                            exportShareItem = ExportShareItem(fileURL: fileURL)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        if viewModel.isExportingData {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text("导出我的数据")
+                    }
+                }
+                .disabled(viewModel.isLoading)
+
                 Button("清除所有对话", role: .destructive) {
                     showConfirmDeleteAll = true
+                }
+
+                Button("删除账户", role: .destructive) {
+                    deleteAccountConfirmText = ""
+                    showDeleteAccountPrompt = true
+                }
+                .foregroundStyle(.red)
+                .alert("删除账户", isPresented: $showDeleteAccountPrompt) {
+                    TextField("输入 DELETE 以确认", text: $deleteAccountConfirmText)
+                        .textInputAutocapitalization(.characters)
+                    Button("永久删除", role: .destructive) {
+                        Task {
+                            let deleted = await viewModel.deleteAccount()
+                            if deleted {
+                                auth.refreshAuthState()
+                            }
+                        }
+                    }
+                    .disabled(deleteAccountConfirmText != "DELETE" || viewModel.isLoading)
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text("此操作会永久删除账号和所有数据，且不可恢复。")
                 }
 
                 Button("退出登录", role: .destructive) {
@@ -225,6 +268,9 @@ struct SettingsView: View {
                 }
             }
         }
+        .sheet(item: $exportShareItem) { item in
+            ActivityShareSheet(activityItems: [item.fileURL])
+        }
     }
 
     private var languageBinding: Binding<SettingsViewModel.Language> {
@@ -246,4 +292,19 @@ struct SettingsView: View {
         case .custom: return "自定义"
         }
     }
+}
+
+private struct ExportShareItem: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+}
+
+private struct ActivityShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

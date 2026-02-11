@@ -125,6 +125,18 @@ final class OpenClawAPI {
         }
     }
 
+    struct UserDataExportResponse: Codable, Hashable {
+        let exportId: String
+        let downloadURL: String
+        let expiresAt: Int
+
+        enum CodingKeys: String, CodingKey {
+            case exportId = "export_id"
+            case downloadURL = "download_url"
+            case expiresAt = "expires_at"
+        }
+    }
+
     // MARK: - Endpoints
 
     // MARK: Auth
@@ -239,6 +251,19 @@ final class OpenClawAPI {
         return true
     }
 
+    func deleteAccount(confirm: Bool = true) async throws {
+        let url = URL(string: "\(baseURLString)/v1/user/account")!
+        var request = try await authorizedRequest(url: url, method: "DELETE")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body = DeleteAccountRequestBody(confirm: confirm)
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+    }
+
     func getPlan() async throws -> PlanResponse {
         let url = URL(string: "\(baseURLString)/v1/user/plan")!
         var request = try await authorizedRequest(url: url, method: "GET")
@@ -274,6 +299,52 @@ final class OpenClawAPI {
         try validate(response: response, data: data)
 
         return try decode(AIConfigResponse.self, from: data)
+    }
+
+    func createUserDataExport() async throws -> UserDataExportResponse {
+        let url = URL(string: "\(baseURLString)/v1/user/export")!
+        var request = try await authorizedRequest(url: url, method: "POST")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{}".utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+
+        return try decode(UserDataExportResponse.self, from: data)
+    }
+
+    func downloadUserDataExport(from downloadURLString: String, exportId: String? = nil) async throws -> URL {
+        guard let downloadURL = URL(string: downloadURLString) else {
+            throw ClawPhonesError.apiError("Invalid export download URL")
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: downloadURL)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ClawPhonesError.networkError(URLError(.badServerResponse))
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)"
+            throw ClawPhonesError.apiError(message)
+        }
+
+        let base = (exportId ?? UUID().uuidString)
+            .replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "", options: .regularExpression)
+        let safeBase = base.isEmpty ? UUID().uuidString : base
+        let fileName = "clawphones_export_\(safeBase)_\(Int(Date().timeIntervalSince1970)).json"
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+
+        do {
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            throw ClawPhonesError.networkError(error)
+        }
+        return fileURL
+    }
+
+    func exportUserDataToTemporaryFile() async throws -> URL {
+        let payload = try await createUserDataExport()
+        return try await downloadUserDataExport(from: payload.downloadURL, exportId: payload.exportId)
     }
 
     // MARK: Conversations
@@ -490,6 +561,10 @@ final class OpenClawAPI {
             case oldPassword = "old_password"
             case newPassword = "new_password"
         }
+    }
+
+    private struct DeleteAccountRequestBody: Encodable {
+        let confirm: Bool
     }
 
     private struct UpdateAIConfigRequestBody: Encodable {

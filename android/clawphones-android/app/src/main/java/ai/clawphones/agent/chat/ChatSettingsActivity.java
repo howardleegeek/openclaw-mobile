@@ -1,6 +1,7 @@
 package ai.clawphones.agent.chat;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -15,13 +16,17 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import com.termux.R;
 
 import org.json.JSONException;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,6 +50,8 @@ public class ChatSettingsActivity extends AppCompatActivity {
     private Button mRefreshPlanButton;
     private Button mSaveAIButton;
     private Button mSaveLanguageButton;
+    private Button mExportDataButton;
+    private Button mDeleteAccountButton;
 
     private ArrayAdapter<String> mPersonaAdapter;
     private ArrayAdapter<String> mLanguageAdapter;
@@ -96,6 +103,8 @@ public class ChatSettingsActivity extends AppCompatActivity {
         mRefreshPlanButton = findViewById(R.id.settings_refresh_plan_btn);
         mSaveAIButton = findViewById(R.id.settings_save_ai_btn);
         mSaveLanguageButton = findViewById(R.id.settings_save_language_btn);
+        mExportDataButton = findViewById(R.id.settings_export_data_btn);
+        mDeleteAccountButton = findViewById(R.id.settings_delete_account_btn);
 
         setupPersonaSpinner();
         setupLanguageSpinner();
@@ -110,6 +119,12 @@ public class ChatSettingsActivity extends AppCompatActivity {
         }
         if (mSaveLanguageButton != null) {
             mSaveLanguageButton.setOnClickListener(v -> saveLanguage());
+        }
+        if (mExportDataButton != null) {
+            mExportDataButton.setOnClickListener(v -> exportUserData());
+        }
+        if (mDeleteAccountButton != null) {
+            mDeleteAccountButton.setOnClickListener(v -> confirmDeleteAccount());
         }
 
         loadSettings();
@@ -277,6 +292,135 @@ public class ChatSettingsActivity extends AppCompatActivity {
         });
     }
 
+    private void exportUserData() {
+        if (mBusy) return;
+        setBusy(true);
+        CrashReporter.setLastAction("exporting_user_data");
+
+        execSafe(() -> {
+            try {
+                ClawPhonesAPI.UserDataExport exportInfo =
+                    ClawPhonesAPI.createUserDataExport(ChatSettingsActivity.this);
+                File exportFile = ClawPhonesAPI.downloadUserDataExport(ChatSettingsActivity.this, exportInfo);
+                runSafe(() -> {
+                    shareExportFile(exportFile);
+                    toast(getString(R.string.settings_export_success));
+                    setBusy(false);
+                });
+            } catch (ClawPhonesAPI.ApiException e) {
+                CrashReporter.reportNonFatal(ChatSettingsActivity.this, e, "exporting_user_data_api");
+                runSafe(() -> {
+                    if (e.statusCode == 401) {
+                        ClawPhonesAPI.clearToken(ChatSettingsActivity.this);
+                        redirectToLogin(getString(R.string.chat_login_expired));
+                        return;
+                    }
+                    toast(getString(R.string.settings_error_export, safeApiMessage(e)));
+                    setBusy(false);
+                });
+            } catch (IOException | JSONException e) {
+                CrashReporter.reportNonFatal(ChatSettingsActivity.this, e, "exporting_user_data");
+                runSafe(() -> {
+                    toast(getString(R.string.settings_error_export, safeMessage(e)));
+                    setBusy(false);
+                });
+            }
+        });
+    }
+
+    private void shareExportFile(File exportFile) {
+        if (exportFile == null || !exportFile.exists()) {
+            toast(getString(R.string.settings_error_export, getString(R.string.chat_error_unknown)));
+            return;
+        }
+
+        Uri uri = FileProvider.getUriForFile(
+            this,
+            getPackageName() + ".export.fileprovider",
+            exportFile
+        );
+
+        Intent sendIntent = new Intent(Intent.ACTION_SEND);
+        sendIntent.setType("application/json");
+        sendIntent.putExtra(Intent.EXTRA_STREAM, uri);
+        sendIntent.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.settings_export_share_subject));
+        sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivity(Intent.createChooser(sendIntent, getString(R.string.settings_export_share_title)));
+        } catch (Exception e) {
+            toast(getString(R.string.settings_error_export, safeMessage(e)));
+        }
+    }
+
+    private void confirmDeleteAccount() {
+        if (mBusy) return;
+
+        final EditText confirmInput = new EditText(this);
+        confirmInput.setSingleLine(true);
+        confirmInput.setHint(getString(R.string.settings_delete_account_hint));
+        int horizontalPadding = Math.round(getResources().getDisplayMetrics().density * 12f);
+        int verticalPadding = Math.round(getResources().getDisplayMetrics().density * 8f);
+        confirmInput.setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding);
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle(R.string.settings_delete_account_title)
+            .setMessage(R.string.settings_delete_account_message)
+            .setView(confirmInput)
+            .setNegativeButton(R.string.chat_action_cancel, null)
+            .setPositiveButton(R.string.settings_delete_account_action, null)
+            .create();
+
+        dialog.setOnShowListener(d -> {
+            Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            if (positive == null) return;
+            positive.setTextColor(ContextCompat.getColor(ChatSettingsActivity.this, R.color.clawphones_danger));
+            positive.setOnClickListener(v -> {
+                String value = safeTrim(confirmInput.getText() == null ? "" : confirmInput.getText().toString());
+                if (!"DELETE".equals(value)) {
+                    confirmInput.setError(getString(R.string.settings_delete_account_input_error));
+                    return;
+                }
+                dialog.dismiss();
+                deleteAccount();
+            });
+        });
+        dialog.show();
+    }
+
+    private void deleteAccount() {
+        if (mBusy) return;
+        setBusy(true);
+        CrashReporter.setLastAction("deleting_account");
+
+        execSafe(() -> {
+            try {
+                ClawPhonesAPI.deleteAccount(ChatSettingsActivity.this);
+                runSafe(() -> {
+                    clearLocalDataAfterAccountDeletion();
+                    toast(getString(R.string.settings_delete_account_success));
+                    redirectToLogin(null);
+                });
+            } catch (ClawPhonesAPI.ApiException e) {
+                CrashReporter.reportNonFatal(ChatSettingsActivity.this, e, "deleting_account_api");
+                runSafe(() -> {
+                    if (e.statusCode == 401) {
+                        clearLocalDataAfterAccountDeletion();
+                        redirectToLogin(getString(R.string.chat_login_expired));
+                        return;
+                    }
+                    toast(getString(R.string.settings_error_delete_account, safeApiMessage(e)));
+                    setBusy(false);
+                });
+            } catch (IOException | JSONException e) {
+                CrashReporter.reportNonFatal(ChatSettingsActivity.this, e, "deleting_account");
+                runSafe(() -> {
+                    toast(getString(R.string.settings_error_delete_account, safeMessage(e)));
+                    setBusy(false);
+                });
+            }
+        });
+    }
+
     private void bindProfile(ClawPhonesAPI.UserProfile profile) {
         if (profile == null) return;
         selectSpinnerValue(mLanguageSpinner, mLanguageOptions, profile.language);
@@ -355,6 +499,33 @@ public class ChatSettingsActivity extends AppCompatActivity {
         if (mRefreshPlanButton != null) mRefreshPlanButton.setEnabled(enabled);
         if (mSaveAIButton != null) mSaveAIButton.setEnabled(enabled);
         if (mSaveLanguageButton != null) mSaveLanguageButton.setEnabled(enabled);
+        if (mExportDataButton != null) mExportDataButton.setEnabled(enabled);
+        if (mDeleteAccountButton != null) mDeleteAccountButton.setEnabled(enabled);
+    }
+
+    private void clearLocalDataAfterAccountDeletion() {
+        ClawPhonesAPI.clearToken(this);
+        mToken = null;
+
+        ConversationCache cache = null;
+        try {
+            cache = new ConversationCache(getApplicationContext());
+            cache.clearAll();
+        } catch (Exception ignored) {
+        } finally {
+            if (cache != null) {
+                try {
+                    cache.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        try {
+            MessageQueue queue = new MessageQueue(getApplicationContext());
+            queue.clearAll();
+        } catch (Exception ignored) {
+        }
     }
 
     private void redirectToLogin(@Nullable String message) {

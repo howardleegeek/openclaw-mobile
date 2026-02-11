@@ -343,11 +343,26 @@
     <string name="settings_language_en">en（English）</string>
     <string name="settings_save_language">保存语言</string>
 
+    <string name="settings_section_account">账户</string>
+    <string name="settings_export_data">导出我的数据</string>
+    <string name="settings_delete_account">删除账户</string>
+    <string name="settings_delete_account_title">删除账户</string>
+    <string name="settings_delete_account_message">请输入 DELETE 以确认永久删除账号，此操作不可恢复。</string>
+    <string name="settings_delete_account_hint">输入 DELETE</string>
+    <string name="settings_delete_account_input_error">请输入 DELETE 才能继续</string>
+    <string name="settings_delete_account_action">永久删除</string>
+    <string name="settings_delete_account_success">账户已删除</string>
+
     <string name="settings_saved_ai">AI 设置已保存</string>
     <string name="settings_saved_language">语言设置已保存</string>
+    <string name="settings_export_success">导出文件已准备好</string>
+    <string name="settings_export_share_title">分享导出数据</string>
+    <string name="settings_export_share_subject">ClawPhones 数据导出</string>
     <string name="settings_error_load_failed">加载设置失败: %1$s</string>
     <string name="settings_error_save_ai">保存 AI 设置失败: %1$s</string>
     <string name="settings_error_save_language">保存语言失败: %1$s</string>
+    <string name="settings_error_export">导出数据失败: %1$s</string>
+    <string name="settings_error_delete_account">删除账户失败: %1$s</string>
 
 
 

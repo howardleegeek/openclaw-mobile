@@ -171,6 +171,18 @@ public final class ConversationCache extends SQLiteOpenHelper {
         }
     }
 
+    public synchronized void clearAll() {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            db.delete(TABLE_MESSAGES, null, null);
+            db.delete(TABLE_CONVERSATIONS, null, null);
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
     public synchronized List<Map<String, Object>> getRecentMessages(String conversationId) {
         return getRecentMessages(conversationId, MAX_MESSAGES_PER_CONVERSATION);
     }

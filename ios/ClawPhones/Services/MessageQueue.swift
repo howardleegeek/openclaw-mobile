@@ -143,6 +143,13 @@ final class MessageQueue {
         }
     }
 
+    func clearAll() {
+        storeQueue.sync {
+            messages.removeAll()
+            UserDefaults.standard.removeObject(forKey: storageKey)
+        }
+    }
+
     private func updateStatus(id: String, status: PendingMessage.Status) {
         storeQueue.sync {
             guard let index = messages.firstIndex(where: { $0.id == id }) else { return }

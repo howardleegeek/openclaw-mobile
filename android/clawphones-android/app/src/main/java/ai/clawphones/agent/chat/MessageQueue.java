@@ -162,6 +162,11 @@ final class MessageQueue {
         db.delete(TABLE_PENDING, COL_ID + " = ?", new String[]{String.valueOf(id)});
     }
 
+    synchronized void clearAll() {
+        SQLiteDatabase db = mHelper.getWritableDatabase();
+        db.delete(TABLE_PENDING, null, null);
+    }
+
     @Nullable
     synchronized PendingMessage getNextPendingToSend() {
         List<PendingMessage> list = queryPending(

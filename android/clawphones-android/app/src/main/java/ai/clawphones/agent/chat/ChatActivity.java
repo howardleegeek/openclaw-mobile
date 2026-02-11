@@ -327,11 +327,12 @@ public class ChatActivity extends AppCompatActivity {
         for (Map<String, Object> row : rows) {
             String role = asString(row.get("role"));
             String content = asString(row.get("content"));
-            if (TextUtils.isEmpty(content)) continue;
+            ParsedVisionContent parsed = parseVisionContent(content);
+            if (TextUtils.isEmpty(parsed.text) && TextUtils.isEmpty(parsed.imageUrl)) continue;
             ChatMessage.Role messageRole = "user".equalsIgnoreCase(role)
                 ? ChatMessage.Role.USER
                 : ChatMessage.Role.ASSISTANT;
-            mMessages.add(new ChatMessage(messageRole, content, false));
+            mMessages.add(new ChatMessage(messageRole, parsed.text, false, parsed.imageUrl));
         }
         restoreQueuedMessagesForConversation(conversationId);
         mAdapter.notifyDataSetChanged();
@@ -361,6 +362,10 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void createConversation() {
+        createConversation(null);
+    }
+
+    private void createConversation(@Nullable Runnable onReady) {
         if (mBusy) return;
         mBusy = true;
         setInputEnabled(false);
@@ -389,6 +394,9 @@ public class ChatActivity extends AppCompatActivity {
                     mBusy = false;
                     setInputEnabled(true);
                     tryFlushPendingMessages();
+                    if (onReady != null) {
+                        onReady.run();
+                    }
                 });
             } catch (IOException e) {
                 CrashReporter.reportNonFatal(ChatActivity.this, e, "creating_conversation");
@@ -434,7 +442,7 @@ public class ChatActivity extends AppCompatActivity {
 
         if (canSendImmediately()) {
             int userIndex = addUserMessage(text);
-            sendMessageOnline(mConversationId, text, null, userIndex);
+            sendMessageOnline(mConversationId, text, null, null, userIndex);
             return;
         }
 
@@ -452,8 +460,13 @@ public class ChatActivity extends AppCompatActivity {
         return !TextUtils.isEmpty(mConversationId) && isNetworkConnected();
     }
 
-    private void sendMessageOnline(@Nullable String conversationId, @NonNull String text,
-                                   @Nullable Long queueId, @Nullable Integer userIndex) {
+    private void sendMessageOnline(
+        @Nullable String conversationId,
+        @NonNull String text,
+        @Nullable String imageUrl,
+        @Nullable Long queueId,
+        @Nullable Integer userIndex
+    ) {
         if (TextUtils.isEmpty(conversationId)) {
             if (queueId != null) {
                 if (mMessageQueue != null) mMessageQueue.markPending(queueId);
@@ -461,6 +474,15 @@ public class ChatActivity extends AppCompatActivity {
                 if (isNetworkConnected() && TextUtils.isEmpty(mConversationId)) {
                     createConversation();
                 }
+                return;
+            }
+
+            if (!TextUtils.isEmpty(imageUrl)) {
+                if (isNetworkConnected() && TextUtils.isEmpty(mConversationId)) {
+                    createConversation(() -> sendMessageOnline(mConversationId, text, imageUrl, null, userIndex));
+                    return;
+                }
+                toast(getString(R.string.chat_image_send_failed));
                 return;
             }
 
@@ -494,6 +516,7 @@ public class ChatActivity extends AppCompatActivity {
                 ChatActivity.this,
                 targetConversationId,
                 text,
+                imageUrl,
                 new ClawPhonesAPI.StreamCallback() {
                     @Override
                     public void onDelta(String delta) {
@@ -539,7 +562,7 @@ public class ChatActivity extends AppCompatActivity {
                                 return;
                             }
 
-                            if (isLikelyOffline(error)) {
+                            if (isLikelyOffline(error) && TextUtils.isEmpty(imageUrl)) {
                                 removeMessageAt(assistantIndex);
                                 if (userIndex != null) {
                                     queueExistingUserMessage(userIndex, text, targetConversationId);
@@ -643,7 +666,7 @@ public class ChatActivity extends AppCompatActivity {
             int index = addUserMessage(next.message, next.id, ChatMessage.DeliveryState.SENDING, next.retryCount);
             mQueuedMessageIndexes.put(next.id, index);
         }
-        sendMessageOnline(targetConversationId, next.message, next.id, mQueuedMessageIndexes.get(next.id));
+        sendMessageOnline(targetConversationId, next.message, null, next.id, mQueuedMessageIndexes.get(next.id));
     }
 
     private void restoreQueuedMessagesForConversation(@Nullable String conversationId) {
@@ -1316,28 +1339,280 @@ public class ChatActivity extends AppCompatActivity {
             }
         }
 
-        /**
-         * Render basic Markdown to HTML. Uses bounded regex patterns to
-         * prevent catastrophic backtracking (ReDoS) on malicious input.
-         */
+        private static final int MAX_MARKDOWN_LENGTH = 50_000;
+        private static final Pattern BLOCK_MATH_PATTERN = Pattern.compile("(?s)\\$\\$\\s*(.+?)\\s*\\$\\$");
+        private static final Pattern INLINE_MATH_PATTERN = Pattern.compile("(?<!\\$)\\$([^$\\n]{1,500})\\$(?!\\$)");
+        private static final Pattern TABLE_SEPARATOR_PATTERN = Pattern.compile("^\\s*\\|?(\\s*:?-{3,}:?\\s*\\|)+\\s*:?-{3,}:?\\s*\\|?\\s*$");
+        private static final Pattern THEMATIC_BREAK_PATTERN = Pattern.compile("^\\s*([-*_]\\s*){3,}$");
+        private static final Pattern ORDERED_LIST_PATTERN = Pattern.compile("^(\\s*)(\\d+)\\.\\s+(.+)$");
+        private static final Pattern UNORDERED_LIST_PATTERN = Pattern.compile("^(\\s*)[-*+]\\s+(.+)$");
+
         private static CharSequence renderMarkdown(String markdown) {
-            if (markdown == null) markdown = "";
-            if (markdown.length() > 50_000) {
-                markdown = markdown.substring(0, 50_000) + "…";
+            String source = markdown == null ? "" : markdown.replace("\r\n", "\n");
+            if (source.length() > MAX_MARKDOWN_LENGTH) {
+                source = source.substring(0, MAX_MARKDOWN_LENGTH) + "…";
             }
+
             try {
-                String html = TextUtils.htmlEncode(markdown);
-                html = html.replaceAll("```([^`]{0,10000})```", "<pre>$1</pre>");
-                html = html.replaceAll("`([^`]{1,500})`", "<tt><b>$1</b></tt>");
-                html = html.replaceAll("\\*\\*([^*]{1,500})\\*\\*", "<b>$1</b>");
-                html = html.replaceAll("(?<!\\*)\\*([^*]{1,500})\\*(?!\\*)", "<i>$1</i>");
-                html = html.replaceAll("\\[([^\\]]{1,200})\\]\\((https?://[^\\)]{1,500})\\)", "<a href=\"$2\">$1</a>");
-                html = html.replaceAll("(?m)^- (.+)", "• $1");
+                String normalized = preprocessTables(source);
+                normalized = normalizeMath(normalized);
+
+                String html = TextUtils.htmlEncode(normalized);
+                html = transformQuoteBlocks(html);
+                html = transformListLines(html);
+                html = html.replaceAll("```([^`]{0,20000})```", "<pre>$1</pre>");
+                html = html.replaceAll("`([^`]{1,1000})`", "<tt><b>$1</b></tt>");
+                html = html.replaceAll("\\*\\*([^*]{1,1000})\\*\\*", "<b>$1</b>");
+                html = html.replaceAll("(?<!\\*)\\*([^*]{1,1000})\\*(?!\\*)", "<i>$1</i>");
+                html = html.replaceAll("\\[([^\\]]{1,400})\\]\\((https?://[^\\)]{1,2000})\\)", "<a href=\"$2\">$1</a>");
+                html = html.replaceAll("(?m)^\\s*([-*_]\\s*){3,}$", "<hr/>");
                 html = html.replace("\n", "<br/>");
-                return Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY);
+
+                Spanned spanned = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY);
+                return applyQuoteBackground(spanned);
             } catch (Exception e) {
-                return markdown;
+                return source;
             }
+        }
+
+        private static CharSequence applyQuoteBackground(Spanned spanned) {
+            if (!(spanned instanceof Spannable)) {
+                return spanned;
+            }
+
+            Spannable spannable = (Spannable) spanned;
+            QuoteSpan[] quoteSpans = spannable.getSpans(0, spannable.length(), QuoteSpan.class);
+            for (QuoteSpan span : quoteSpans) {
+                int start = spannable.getSpanStart(span);
+                int end = spannable.getSpanEnd(span);
+                int flags = spannable.getSpanFlags(span);
+                spannable.removeSpan(span);
+                spannable.setSpan(new QuoteSpan(0xFF8E8E8E), start, end, flags);
+                spannable.setSpan(new BackgroundColorSpan(0x22FFFFFF), start, end, flags);
+            }
+
+            return spannable;
+        }
+
+        private static String normalizeMath(String markdown) {
+            Matcher blockMatcher = BLOCK_MATH_PATTERN.matcher(markdown);
+            StringBuffer blockBuffer = new StringBuffer();
+            while (blockMatcher.find()) {
+                String expression = blockMatcher.group(1) == null ? "" : blockMatcher.group(1).trim();
+                String replacement = "```math\n" + expression + "\n```";
+                blockMatcher.appendReplacement(blockBuffer, Matcher.quoteReplacement(replacement));
+            }
+            blockMatcher.appendTail(blockBuffer);
+
+            Matcher inlineMatcher = INLINE_MATH_PATTERN.matcher(blockBuffer.toString());
+            StringBuffer inlineBuffer = new StringBuffer();
+            while (inlineMatcher.find()) {
+                String expression = inlineMatcher.group(1) == null ? "" : inlineMatcher.group(1).trim();
+                String replacement = expression.isEmpty() ? inlineMatcher.group(0) : "`" + expression + "`";
+                inlineMatcher.appendReplacement(inlineBuffer, Matcher.quoteReplacement(replacement));
+            }
+            inlineMatcher.appendTail(inlineBuffer);
+            return inlineBuffer.toString();
+        }
+
+        private static String transformQuoteBlocks(String encodedMarkdown) {
+            String[] lines = encodedMarkdown.split("\n", -1);
+            StringBuilder output = new StringBuilder(encodedMarkdown.length() + 64);
+            int index = 0;
+
+            while (index < lines.length) {
+                String line = lines[index];
+                String trimmed = line.trim();
+                if (trimmed.startsWith("&gt;")) {
+                    StringBuilder quoteBody = new StringBuilder();
+                    while (index < lines.length) {
+                        String quoteLine = lines[index].trim();
+                        if (!quoteLine.startsWith("&gt;")) break;
+
+                        String content = quoteLine.substring(4);
+                        if (content.startsWith(" ")) content = content.substring(1);
+                        if (quoteBody.length() > 0) quoteBody.append("<br/>");
+                        quoteBody.append(content);
+                        index++;
+                    }
+                    output.append("<blockquote>").append(quoteBody).append("</blockquote>");
+                    if (index < lines.length) output.append("\n");
+                    continue;
+                }
+
+                output.append(line);
+                if (index < lines.length - 1) output.append("\n");
+                index++;
+            }
+
+            return output.toString();
+        }
+
+        private static String transformListLines(String encodedMarkdown) {
+            String[] lines = encodedMarkdown.split("\n", -1);
+            StringBuilder output = new StringBuilder(encodedMarkdown.length() + 64);
+
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i];
+                Matcher ordered = ORDERED_LIST_PATTERN.matcher(line);
+                Matcher unordered = UNORDERED_LIST_PATTERN.matcher(line);
+
+                if (ordered.matches()) {
+                    output.append(renderIndentedListPrefix(ordered.group(1)));
+                    output.append(ordered.group(2)).append(". ").append(ordered.group(3));
+                } else if (unordered.matches()) {
+                    output.append(renderIndentedListPrefix(unordered.group(1)));
+                    output.append("• ").append(unordered.group(2));
+                } else if (THEMATIC_BREAK_PATTERN.matcher(line.trim()).matches()) {
+                    output.append(line.trim());
+                } else {
+                    output.append(line);
+                }
+
+                if (i < lines.length - 1) output.append("\n");
+            }
+
+            return output.toString();
+        }
+
+        private static String renderIndentedListPrefix(String spaces) {
+            int indent = spaces == null ? 0 : spaces.length() / 2;
+            if (indent <= 0) return "";
+
+            StringBuilder prefix = new StringBuilder(indent * 24);
+            for (int i = 0; i < indent; i++) {
+                prefix.append("&nbsp;&nbsp;&nbsp;&nbsp;");
+            }
+            return prefix.toString();
+        }
+
+        private static boolean containsMarkdownTable(String markdown) {
+            if (markdown == null || markdown.isEmpty()) return false;
+            String[] lines = markdown.replace("\r\n", "\n").split("\n");
+            for (int i = 0; i + 1 < lines.length; i++) {
+                if (isLikelyTableRow(lines[i]) && isTableSeparator(lines[i + 1])) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static String preprocessTables(String markdown) {
+            String[] lines = markdown.split("\n", -1);
+            StringBuilder output = new StringBuilder(markdown.length() + 64);
+            int index = 0;
+
+            while (index < lines.length) {
+                if (index + 1 < lines.length && isLikelyTableRow(lines[index]) && isTableSeparator(lines[index + 1])) {
+                    ArrayList<String> tableLines = new ArrayList<>();
+                    tableLines.add(lines[index]);
+                    tableLines.add(lines[index + 1]);
+                    index += 2;
+                    while (index < lines.length && isLikelyTableRow(lines[index])) {
+                        tableLines.add(lines[index]);
+                        index++;
+                    }
+
+                    String table = renderAlignedTable(tableLines);
+                    output.append("```table\n").append(table).append("\n```");
+                    if (index < lines.length) output.append("\n");
+                    continue;
+                }
+
+                output.append(lines[index]);
+                if (index < lines.length - 1) output.append("\n");
+                index++;
+            }
+
+            return output.toString();
+        }
+
+        private static boolean isLikelyTableRow(String line) {
+            return line != null && line.contains("|");
+        }
+
+        private static boolean isTableSeparator(String line) {
+            if (line == null) return false;
+            return TABLE_SEPARATOR_PATTERN.matcher(line).matches();
+        }
+
+        private static String renderAlignedTable(List<String> markdownTableLines) {
+            ArrayList<List<String>> rows = new ArrayList<>();
+            for (int i = 0; i < markdownTableLines.size(); i++) {
+                if (i == 1 && isTableSeparator(markdownTableLines.get(i))) continue;
+                rows.add(parseTableCells(markdownTableLines.get(i)));
+            }
+            if (rows.isEmpty()) return "";
+
+            int columnCount = 0;
+            for (List<String> row : rows) {
+                columnCount = Math.max(columnCount, row.size());
+            }
+            if (columnCount == 0) return "";
+
+            int[] widths = new int[columnCount];
+            for (int i = 0; i < columnCount; i++) widths[i] = 3;
+            for (List<String> row : rows) {
+                for (int col = 0; col < columnCount; col++) {
+                    String value = col < row.size() ? row.get(col) : "";
+                    widths[col] = Math.max(widths[col], value.length());
+                }
+            }
+
+            StringBuilder out = new StringBuilder();
+            out.append(renderTableRow(rows.get(0), widths)).append("\n");
+            out.append(renderTableSeparator(widths));
+            for (int i = 1; i < rows.size(); i++) {
+                out.append("\n").append(renderTableRow(rows.get(i), widths));
+            }
+            return out.toString();
+        }
+
+        private static List<String> parseTableCells(String line) {
+            String trimmed = line == null ? "" : line.trim();
+            if (trimmed.startsWith("|")) trimmed = trimmed.substring(1);
+            if (trimmed.endsWith("|")) trimmed = trimmed.substring(0, trimmed.length() - 1);
+
+            String[] parts = trimmed.split("\\|", -1);
+            ArrayList<String> cells = new ArrayList<>(parts.length);
+            for (String part : parts) {
+                cells.add(part.trim());
+            }
+            return cells;
+        }
+
+        private static String renderTableRow(List<String> row, int[] widths) {
+            StringBuilder line = new StringBuilder();
+            for (int col = 0; col < widths.length; col++) {
+                String value = col < row.size() ? row.get(col) : "";
+                line.append("| ").append(padRight(value, widths[col])).append(" ");
+            }
+            line.append("|");
+            return line.toString();
+        }
+
+        private static String renderTableSeparator(int[] widths) {
+            StringBuilder line = new StringBuilder();
+            for (int width : widths) {
+                int span = Math.max(3, width);
+                line.append("| ").append(repeat("-", span)).append(" ");
+            }
+            line.append("|");
+            return line.toString();
+        }
+
+        private static String padRight(String value, int width) {
+            if (value == null) value = "";
+            if (value.length() >= width) return value;
+            return value + repeat(" ", width - value.length());
+        }
+
+        private static String repeat(String text, int count) {
+            StringBuilder builder = new StringBuilder(Math.max(0, count) * text.length());
+            for (int i = 0; i < count; i++) {
+                builder.append(text);
+            }
+            return builder.toString();
         }
     }
 }

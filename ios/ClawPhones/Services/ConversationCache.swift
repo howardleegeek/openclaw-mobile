@@ -127,6 +127,13 @@ actor ConversationCache {
         replaceMessages(conversationId: conversationId, messages: current)
     }
 
+    func clearAll() {
+        let dir = cacheDirectory
+        if fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.removeItem(at: dir)
+        }
+    }
+
     private func normalizeConversations(_ conversations: [ConversationSummary]) -> [ConversationSummary] {
         var bestById: [String: ConversationSummary] = [:]
 

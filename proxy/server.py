@@ -19,8 +19,8 @@ import bcrypt
 import httpx
 import jwt
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from jwt import InvalidTokenError
 
 
@@ -90,6 +90,8 @@ def _record_login_failure(ip: str, now: int) -> None:
 # -----------------------------
 
 TOKEN_DB_PATH = os.getenv("TOKEN_DB_PATH", "./data/tokens.sqlite3")
+EXPORT_DIR = os.getenv("EXPORT_DIR", "./data/exports")
+EXPORT_URL_TTL_SECONDS = 24 * 60 * 60
 ADMIN_KEY = os.getenv("ADMIN_KEY")  # optional
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
@@ -238,6 +240,16 @@ def _ensure_dir(path: str) -> None:
         os.makedirs(d, exist_ok=True)
 
 
+def _ensure_export_dir() -> None:
+    os.makedirs(EXPORT_DIR, exist_ok=True)
+
+
+def _safe_export_filename(*, user_id: str, export_id: str, now: int) -> str:
+    safe_user = re.sub(r"[^a-zA-Z0-9_-]", "", (user_id or ""))[:32] or "user"
+    safe_export = re.sub(r"[^a-zA-Z0-9_-]", "", (export_id or ""))[:12] or "export"
+    return f"user_export_{safe_user}_{now}_{safe_export}.json"
+
+
 def _normalize_email(email: str) -> str:
     return (email or "").strip().lower()
 
@@ -339,6 +351,7 @@ def _utc_day_bounds(ts: Optional[int] = None) -> Tuple[int, int, str]:
 
 async def _init_db() -> None:
     _ensure_dir(TOKEN_DB_PATH)
+    _ensure_export_dir()
     async with aiosqlite.connect(TOKEN_DB_PATH) as db:
         await db.execute(
             """
@@ -463,6 +476,20 @@ async def _init_db() -> None:
         await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_push_tokens_platform_token ON push_tokens(platform, push_token)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
         await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_apple_id ON users(apple_id)")
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_exports (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL REFERENCES users(id),
+              download_token TEXT NOT NULL UNIQUE,
+              file_path TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              expires_at INTEGER NOT NULL
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_user_exports_user_created ON user_exports(user_id, created_at DESC)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_user_exports_expires ON user_exports(expires_at)")
         await db.commit()
 
 
@@ -640,6 +667,154 @@ async def _require_user(request: Request) -> Tuple[str, Dict[str, Any]]:
     if not user:
         raise HTTPException(status_code=401, detail="user not found")
     return (token, user)
+
+
+async def _cleanup_expired_exports(now: int) -> None:
+    expired_files: List[str] = []
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            async with db.execute(
+                "SELECT file_path FROM user_exports WHERE expires_at <= ?",
+                (int(now),),
+            ) as cur:
+                rows = await cur.fetchall()
+        except sqlite3.OperationalError:
+            # Table may not exist in older DB before migration/startup.
+            return
+        expired_files = [str(r["file_path"]) for r in rows if r and r["file_path"]]
+        if expired_files:
+            await db.execute("DELETE FROM user_exports WHERE expires_at <= ?", (int(now),))
+            await db.commit()
+
+    for file_path in expired_files:
+        with suppress(OSError):
+            os.remove(file_path)
+
+
+async def _build_user_export_payload(user: Dict[str, Any]) -> Dict[str, Any]:
+    user_id = str(user["id"])
+    ai_config = _safe_json_loads_object(user.get("ai_config"))
+    now = int(time.time())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        async with db.execute(
+            """
+            SELECT token,tier,status,created_at,expires_at
+            FROM device_tokens
+            WHERE user_id=?
+            ORDER BY created_at ASC, rowid ASC
+            """,
+            (user_id,),
+        ) as cur:
+            token_rows = await cur.fetchall()
+
+        async with db.execute(
+            """
+            SELECT platform,push_token,created_at
+            FROM push_tokens
+            WHERE user_id=?
+            ORDER BY created_at DESC, id DESC
+            """,
+            (user_id,),
+        ) as cur:
+            push_rows = await cur.fetchall()
+
+        async with db.execute(
+            """
+            SELECT c.id,c.device_token,c.title,c.created_at,c.updated_at
+            FROM conversations c
+            JOIN device_tokens dt ON dt.token = c.device_token
+            WHERE dt.user_id = ?
+            ORDER BY c.created_at ASC, c.rowid ASC
+            """,
+            (user_id,),
+        ) as cur:
+            convo_rows = await cur.fetchall()
+
+        async with db.execute(
+            """
+            SELECT m.id,m.conversation_id,m.role,m.content,m.created_at
+            FROM messages m
+            JOIN conversations c ON c.id = m.conversation_id
+            JOIN device_tokens dt ON dt.token = c.device_token
+            WHERE dt.user_id = ?
+            ORDER BY m.created_at ASC, m.rowid ASC
+            """,
+            (user_id,),
+        ) as cur:
+            msg_rows = await cur.fetchall()
+
+    messages_by_conversation: Dict[str, List[Dict[str, Any]]] = {}
+    for row in msg_rows:
+        cid = str(row["conversation_id"])
+        messages_by_conversation.setdefault(cid, []).append(
+            {
+                "id": str(row["id"]),
+                "role": str(row["role"]),
+                "content": str(row["content"]),
+                "created_at": int(row["created_at"] or 0),
+            }
+        )
+
+    conversations: List[Dict[str, Any]] = []
+    for row in convo_rows:
+        cid = str(row["id"])
+        conversations.append(
+            {
+                "id": cid,
+                "title": row["title"],
+                "device_token": str(row["device_token"]),
+                "created_at": int(row["created_at"] or 0),
+                "updated_at": int(row["updated_at"] or 0),
+                "messages": messages_by_conversation.get(cid, []),
+            }
+        )
+
+    return {
+        "export_version": 1,
+        "generated_at": now,
+        "account": {
+            "user_id": user_id,
+            "email": user.get("email") or "",
+            "name": user.get("name") or "",
+            "avatar_url": user.get("avatar_url"),
+            "tier": user.get("tier") or "free",
+            "language": user.get("language") or "auto",
+            "apple_id": user.get("apple_id"),
+            "created_at": user.get("created_at"),
+            "updated_at": user.get("updated_at"),
+        },
+        "settings": {
+            "language": user.get("language") or "auto",
+            "ai_config": ai_config,
+            "push_tokens": [
+                {
+                    "platform": str(r["platform"]),
+                    "push_token": str(r["push_token"]),
+                    "created_at": int(r["created_at"] or 0),
+                }
+                for r in push_rows
+            ],
+        },
+        "device_tokens": [
+            {
+                "token": str(r["token"]),
+                "tier": str(r["tier"]),
+                "status": str(r["status"]),
+                "created_at": int(r["created_at"] or 0),
+                "expires_at": int(r["expires_at"]) if isinstance(r["expires_at"], (int, float)) else None,
+            }
+            for r in token_rows
+        ],
+        "conversations": conversations,
+        "summary": {
+            "conversation_count": len(conversations),
+            "message_count": len(msg_rows),
+        },
+    }
 
 
 async def _get_tier_for_token(token: str) -> str:
@@ -1696,6 +1871,171 @@ async def user_register_push_token(request: Request) -> Any:
         "platform": platform,
         "created_at": int(row["created_at"]) if row else now,
     }
+
+
+@app.post("/v1/user/export")
+async def user_export_data(request: Request) -> Any:
+    _, user = await _require_user(request)
+    now = int(time.time())
+    await _cleanup_expired_exports(now)
+
+    payload = await _build_user_export_payload(user)
+    export_id = str(uuid.uuid4())
+    download_token = secrets.token_urlsafe(32)
+    expires_at = now + EXPORT_URL_TTL_SECONDS
+    filename = _safe_export_filename(user_id=str(user["id"]), export_id=export_id, now=now)
+    file_path = os.path.join(EXPORT_DIR, filename)
+
+    _ensure_export_dir()
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+    except Exception:
+        raise HTTPException(status_code=500, detail="failed to build export file")
+
+    try:
+        async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+            await db.execute(
+                """
+                INSERT INTO user_exports(id,user_id,download_token,file_path,created_at,expires_at)
+                VALUES (?,?,?,?,?,?)
+                """,
+                (export_id, str(user["id"]), download_token, file_path, now, expires_at),
+            )
+            await db.commit()
+    except Exception:
+        with suppress(OSError):
+            os.remove(file_path)
+        raise HTTPException(status_code=500, detail="failed to save export record")
+
+    base_download_url = str(request.url_for("user_download_export", export_id=export_id))
+    download_url = f"{base_download_url}?token={download_token}"
+    return {
+        "export_id": export_id,
+        "download_url": download_url,
+        "expires_at": expires_at,
+    }
+
+
+@app.get("/v1/user/export/{export_id}", name="user_download_export")
+async def user_download_export(export_id: str, token: str = "") -> Any:
+    token_norm = (token or "").strip()
+    if not token_norm:
+        raise HTTPException(status_code=401, detail="download token required")
+
+    now = int(time.time())
+    await _cleanup_expired_exports(now)
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            async with db.execute(
+                "SELECT id,file_path,expires_at FROM user_exports WHERE id=? AND download_token=?",
+                (export_id, token_norm),
+            ) as cur:
+                row = await cur.fetchone()
+        except sqlite3.OperationalError:
+            row = None
+
+        if not row:
+            raise HTTPException(status_code=404, detail="export not found")
+
+        file_path = str(row["file_path"])
+        expires_at = int(row["expires_at"] or 0)
+
+        if expires_at > 0 and now >= expires_at:
+            await db.execute("DELETE FROM user_exports WHERE id=?", (export_id,))
+            await db.commit()
+            with suppress(OSError):
+                os.remove(file_path)
+            raise HTTPException(status_code=410, detail="export link expired")
+
+        if not os.path.isfile(file_path):
+            await db.execute("DELETE FROM user_exports WHERE id=?", (export_id,))
+            await db.commit()
+            raise HTTPException(status_code=404, detail="export file missing")
+
+    return FileResponse(
+        path=file_path,
+        media_type="application/json",
+        filename=f"clawphones_export_{export_id}.json",
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@app.delete("/v1/user/account", status_code=204)
+async def user_delete_account(request: Request) -> Response:
+    _, user = await _require_user(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="request body must be valid JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+    if body.get("confirm") is not True:
+        raise HTTPException(status_code=400, detail="confirm must be true")
+
+    user_id = str(user["id"])
+    export_files: List[str] = []
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            async with db.execute("SELECT file_path FROM user_exports WHERE user_id=?", (user_id,)) as cur:
+                export_files = [str(r["file_path"]) for r in await cur.fetchall() if r and r["file_path"]]
+        except sqlite3.OperationalError:
+            export_files = []
+
+        # Purge messages first, then parent entities and token-linked records.
+        await db.execute(
+            """
+            DELETE FROM messages
+            WHERE conversation_id IN (
+              SELECT id FROM conversations
+              WHERE device_token IN (
+                SELECT token FROM device_tokens WHERE user_id=?
+              )
+            )
+            """,
+            (user_id,),
+        )
+        await db.execute(
+            """
+            DELETE FROM conversations
+            WHERE device_token IN (
+              SELECT token FROM device_tokens WHERE user_id=?
+            )
+            """,
+            (user_id,),
+        )
+        await db.execute(
+            """
+            DELETE FROM usage_daily
+            WHERE token IN (
+              SELECT token FROM device_tokens WHERE user_id=?
+            )
+            """,
+            (user_id,),
+        )
+        await db.execute(
+            """
+            DELETE FROM crash_reports
+            WHERE device_token IN (
+              SELECT token FROM device_tokens WHERE user_id=?
+            )
+            """,
+            (user_id,),
+        )
+        await db.execute("DELETE FROM push_tokens WHERE user_id=?", (user_id,))
+        await db.execute("DELETE FROM user_exports WHERE user_id=?", (user_id,))
+        await db.execute("DELETE FROM device_tokens WHERE user_id=?", (user_id,))
+        await db.execute("DELETE FROM users WHERE id=?", (user_id,))
+        await db.commit()
+
+    for file_path in export_files:
+        with suppress(OSError):
+            os.remove(file_path)
+
+    return Response(status_code=204)
 
 
 async def _call_llm(

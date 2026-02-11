@@ -170,6 +170,43 @@
                 android:textAllCaps="false"
                 android:textColor="#1A1A1A"
                 android:textStyle="bold" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="16dp"
+                android:background="@color/clawphones_surface" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/settings_section_account"
+                android:textColor="@color/clawphones_on_background"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/settings_export_data_btn"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/clawphones_button_bg"
+                android:text="@string/settings_export_data"
+                android:textAllCaps="false"
+                android:textColor="#1A1A1A"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/settings_delete_account_btn"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/clawphones_button_outline_bg"
+                android:text="@string/settings_delete_account"
+                android:textAllCaps="false"
+                android:textColor="@color/clawphones_danger"
+                android:textStyle="bold" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

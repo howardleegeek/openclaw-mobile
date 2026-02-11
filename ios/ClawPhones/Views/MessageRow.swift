@@ -51,6 +51,18 @@ struct MessageRow: View {
         "while", "with", "yield"
     ]
 
+    private static let fileCardOpen = "[[FILE_CARD]]"
+    private static let fileCardClose = "[[/FILE_CARD]]"
+    private static let fileContextOpen = "[[FILE_CONTEXT]]"
+    private static let fileContextClose = "[[/FILE_CONTEXT]]"
+
+    private struct FileCardPayload {
+        let name: String
+        let size: Int
+        let type: String
+        let extraText: String
+    }
+
     var body: some View {
         HStack(alignment: .bottom) {
             if isUser {
@@ -117,11 +129,40 @@ struct MessageRow: View {
     @ViewBuilder
     private var contentView: some View {
         if isUser {
-            Text(message.content)
-                .foregroundStyle(message.deliveryState == .sending ? Color(white: 0.78) : Color.white)
+            if let payload = parseFileCardPayload(from: message.content) {
+                userFileCardView(payload)
+            } else {
+                Text(message.content)
+                    .foregroundStyle(message.deliveryState == .sending ? Color(white: 0.78) : Color.white)
+            }
         } else {
             assistantContentView
         }
+    }
+
+    private func userFileCardView(_ payload: FileCardPayload) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                Text(fileIcon(for: payload.type))
+                    .font(.system(size: 24))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(payload.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(message.deliveryState == .sending ? Color(white: 0.82) : Color.white)
+                        .lineLimit(2)
+                    Text(formatFileSize(payload.size))
+                        .font(.caption)
+                        .foregroundStyle(Color.white.opacity(0.82))
+                }
+            }
+            if !payload.extraText.isEmpty {
+                Text(payload.extraText)
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -343,6 +384,66 @@ struct MessageRow: View {
         }
 
         return output
+    }
+
+    private func parseFileCardPayload(from raw: String) -> FileCardPayload? {
+        guard let cardStart = raw.range(of: Self.fileCardOpen),
+              let cardEnd = raw.range(of: Self.fileCardClose),
+              cardStart.upperBound <= cardEnd.lowerBound else {
+            return nil
+        }
+
+        let jsonString = String(raw[cardStart.upperBound..<cardEnd.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !jsonString.isEmpty,
+              let jsonData = jsonString.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            return nil
+        }
+
+        let rawName = ((object["name"] as? String) ?? "file").trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = rawName.isEmpty ? "file" : rawName
+        let size = (object["size"] as? NSNumber)?.intValue ?? 0
+        let type = ((object["type"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var tail = String(raw[cardEnd.upperBound...])
+        if let contextStart = tail.range(of: Self.fileContextOpen),
+           let contextEnd = tail.range(of: Self.fileContextClose),
+           contextStart.upperBound <= contextEnd.lowerBound {
+            let before = tail[..<contextStart.lowerBound]
+            let after = tail[contextEnd.upperBound...]
+            tail = String(before + after)
+        }
+        let extraText = tail.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return FileCardPayload(name: name, size: max(0, size), type: type, extraText: extraText)
+    }
+
+    private func fileIcon(for type: String) -> String {
+        switch type.lowercased() {
+        case "pdf":
+            return "📕"
+        case "csv":
+            return "📊"
+        case "json":
+            return "🧩"
+        case "md":
+            return "📝"
+        case "txt":
+            return "📄"
+        default:
+            return "📎"
+        }
+    }
+
+    private func formatFileSize(_ bytes: Int) -> String {
+        let value = Double(max(0, bytes))
+        if value < 1024 {
+            return "\(Int(value)) B"
+        }
+        if value < 1024 * 1024 {
+            return String(format: "%.1f KB", value / 1024)
+        }
+        return String(format: "%.2f MB", value / (1024 * 1024))
     }
 
     private func normalizedLanguage(_ language: String?) -> String {

@@ -11,6 +11,8 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -148,6 +150,19 @@ public class ClawPhonesAPI {
             this.customPrompt = customPrompt;
             this.temperature = temperature;
             this.personas = personas == null ? new ArrayList<>() : personas;
+        }
+    }
+
+    /** /v1/user/export */
+    public static class UserDataExport {
+        public final String exportId;
+        public final String downloadUrl;
+        public final long expiresAt;
+
+        public UserDataExport(String exportId, String downloadUrl, long expiresAt) {
+            this.exportId = exportId == null ? "" : exportId;
+            this.downloadUrl = downloadUrl == null ? "" : downloadUrl;
+            this.expiresAt = expiresAt;
         }
     }
 
@@ -425,6 +440,78 @@ public class ClawPhonesAPI {
         return extractAIConfig(resp);
     }
 
+    /** POST /v1/user/export -> temporary download link */
+    public static UserDataExport createUserDataExport(Context context)
+        throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
+        JSONObject resp = doPost(BASE_URL + "/v1/user/export", new JSONObject(), token);
+        return extractUserDataExport(resp);
+    }
+
+    /** Download export JSON to app-local file. */
+    public static File downloadUserDataExport(Context context, UserDataExport exportInfo)
+        throws IOException, ApiException {
+        if (context == null) throw new IOException("context is required");
+        if (exportInfo == null || exportInfo.downloadUrl == null || exportInfo.downloadUrl.trim().isEmpty()) {
+            throw new ApiException(400, "missing export download url");
+        }
+
+        String downloadUrl = exportInfo.downloadUrl.trim();
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) new URL(downloadUrl).openConnection();
+            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(READ_TIMEOUT_MS);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "application/json");
+
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) {
+                String raw = readBody(conn, code);
+                throw new ApiException(code, raw.isEmpty() ? "HTTP " + code : raw);
+            }
+
+            File exportDir = new File(context.getFilesDir(), "exports");
+            if (!exportDir.exists() && !exportDir.mkdirs()) {
+                throw new IOException("failed to create export directory");
+            }
+
+            String idPart = sanitizeFileNamePart(exportInfo.exportId);
+            if (idPart.isEmpty()) {
+                idPart = String.valueOf(nowEpochSeconds());
+            }
+            File output = new File(
+                exportDir,
+                "clawphones_export_" + idPart + "_" + nowEpochSeconds() + ".json"
+            );
+
+            try (
+                InputStream in = conn.getInputStream();
+                FileOutputStream out = new FileOutputStream(output, false)
+            ) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+                out.flush();
+            }
+
+            return output;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    /** DELETE /v1/user/account with body {"confirm": true} -> 204 */
+    public static void deleteAccount(Context context)
+        throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
+        JSONObject body = new JSONObject();
+        body.put("confirm", true);
+        doDeleteNoContent(BASE_URL + "/v1/user/account", body, token);
+    }
+
     /** POST /v1/crash-reports -> 2xx */
     public static void postCrashReport(Context context, String jsonBody)
         throws IOException, ApiException {
@@ -629,7 +716,18 @@ public class ClawPhonesAPI {
     }
 
     private static void doDeleteNoContent(String urlStr, String token) throws IOException, ApiException {
+        doDeleteNoContent(urlStr, null, token);
+    }
+
+    private static void doDeleteNoContent(String urlStr, JSONObject body, String token) throws IOException, ApiException {
         HttpURLConnection conn = openConnection(urlStr, "DELETE", token);
+        if (body != null) {
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+        }
         int code = conn.getResponseCode();
         String raw = "";
         try {
@@ -1073,6 +1171,23 @@ public class ClawPhonesAPI {
         );
     }
 
+    private static UserDataExport extractUserDataExport(JSONObject resp) throws JSONException {
+        if (resp == null) {
+            throw new JSONException("Empty export response");
+        }
+        String exportId = resp.optString("export_id", "").trim();
+        String downloadUrl = resp.optString("download_url", "").trim();
+        long expiresAt = resp.optLong("expires_at", 0L);
+
+        if (downloadUrl.isEmpty()) {
+            throw new JSONException("Missing export download_url");
+        }
+        if (downloadUrl.startsWith("/")) {
+            downloadUrl = BASE_URL + downloadUrl;
+        }
+        return new UserDataExport(exportId, downloadUrl, expiresAt);
+    }
+
     private static AIConfig extractAIConfig(JSONObject resp) {
         JSONObject payload = resp == null ? null : resp.optJSONObject("ai_config");
         if (payload == null) payload = resp;
@@ -1123,5 +1238,10 @@ public class ClawPhonesAPI {
         if ("writing".equals(normalized)) return "writer";
         if ("translation".equals(normalized)) return "translator";
         return normalized;
+    }
+
+    private static String sanitizeFileNamePart(String raw) {
+        if (raw == null) return "";
+        return raw.replaceAll("[^a-zA-Z0-9_-]", "");
     }
 }

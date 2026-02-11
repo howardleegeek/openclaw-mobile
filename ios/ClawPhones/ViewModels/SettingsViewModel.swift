@@ -95,6 +95,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var passwordChangeSucceeded: Bool = false
+    @Published var isExportingData: Bool = false
 
     func loadProfile() async {
         errorMessage = nil
@@ -280,6 +281,42 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    func deleteAccount() async -> Bool {
+        errorMessage = nil
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            try await OpenClawAPI.shared.deleteAccount(confirm: true)
+            await purgeLocalUserDataAfterAccountDeletion()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func exportMyData() async -> URL? {
+        if isExportingData {
+            return nil
+        }
+
+        errorMessage = nil
+        isLoading = true
+        isExportingData = true
+        defer {
+            isExportingData = false
+            isLoading = false
+        }
+
+        do {
+            return try await OpenClawAPI.shared.exportUserDataToTemporaryFile()
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     func logout() {
         // Ensure all auth state is cleared.
         DeviceConfig.shared.deviceToken = nil
@@ -289,6 +326,24 @@ final class SettingsViewModel: ObservableObject {
         UserDefaults.standard.removeObject(forKey: DeviceConfig.managedBaseURLKey)
         UserDefaults.standard.removeObject(forKey: DeviceConfig.managedModeKey)
 
+        NotificationCenter.default.post(name: .clawPhonesAuthDidChange, object: nil)
+    }
+
+    private func purgeLocalUserDataAfterAccountDeletion() async {
+        DeviceConfig.shared.clearTokens()
+        UserDefaults.standard.removeObject(forKey: DeviceConfig.managedDeviceTokenKey)
+        UserDefaults.standard.removeObject(forKey: DeviceConfig.managedTokenExpiresAtKey)
+        UserDefaults.standard.removeObject(forKey: DeviceConfig.managedBaseURLKey)
+        UserDefaults.standard.removeObject(forKey: DeviceConfig.managedModeKey)
+
+        await ConversationCache.shared.clearAll()
+        MessageQueue.shared.clearAll()
+
+        profile = .mock
+        plan = .mock
+        aiConfig = .mock
+
+        NotificationCenter.default.post(name: .clawPhonesConversationsDidChange, object: nil)
         NotificationCenter.default.post(name: .clawPhonesAuthDidChange, object: nil)
     }
 }
