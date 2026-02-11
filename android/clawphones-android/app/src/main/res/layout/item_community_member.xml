@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp">
+
+    <ImageView
+        android:id="@+id/member_avatar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="#3A3A3A"
+        android:padding="12dp"
+        android:src="@android:drawable/ic_menu_myplaces"
+        android:tint="#888888" />
+
+    <TextView
+        android:id="@+id/member_name"
+        android:layout_width="60dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#F5F0E6"
+        android:textSize="12sp"
+        android:gravity="center" />
+
+</LinearLayout>

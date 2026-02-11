@@ -5,9 +5,11 @@
 
 import Foundation
 import SwiftUI
+import UIKit
 
 @main
 struct ClawPhonesApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var startupCoordinator = AppStartupCoordinator()
     private let alertManager = AlertManager.shared
 
@@ -19,6 +21,50 @@ struct ClawPhonesApp: App {
                     startupCoordinator.startDeferredInitialization()
                 }
         }
+    }
+}
+
+// MARK: - AppDelegate
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    let pushNotificationService = PushNotificationService.shared
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Register for remote notifications
+        application.registerForRemoteNotifications()
+
+        // Check notification settings
+        Task {
+            await pushNotificationService.getNotificationSettings()
+        }
+
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        pushNotificationService.didRegisterForRemoteNotifications(deviceToken: deviceToken)
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        pushNotificationService.didFailToRegisterForRemoteNotifications(error: error)
+    }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        pushNotificationService.handleRemoteNotification(userInfo: userInfo)
+        completionHandler(.newData)
     }
 }
 

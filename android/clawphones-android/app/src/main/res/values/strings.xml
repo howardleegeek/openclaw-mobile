@@ -610,4 +610,99 @@
     <string name="alert_not_found">事件不存在或已被删除</string>
     <string name="alert_share_text">ClawVision 事件\n类型: %1$s\n置信度: %2$d%%\n时间: %3$s\n位置: %4$s</string>
 
+    <!-- Community List / Detail -->
+    <string name="community_list_title">社区 / Communities</string>
+    <string name="community_empty_state">暂无社区\n点击 + 创建或加入社区</string>
+    <string name="community_fab_description">创建或加入社区</string>
+    <string name="community_menu_create">创建社区</string>
+    <string name="community_menu_join">加入社区</string>
+    <string name="community_create_title">创建社区 / Create Community</string>
+    <string name="community_create_button">创建 / Create</string>
+    <string name="community_create_name_label">社区名称 / Community Name</string>
+    <string name="community_create_name_hint">输入社区名称</string>
+    <string name="community_create_desc_label">描述 / Description</string>
+    <string name="community_create_desc_hint">输入社区描述（可选）</string>
+    <string name="community_join_title">加入社区 / Join Community</string>
+    <string name="community_join_button">加入 / Join</string>
+    <string name="community_join_code_label">邀请码 / Invite Code</string>
+    <string name="community_join_code_hint">输入邀请码</string>
+    <string name="community_join_description">请输入社区邀请码以加入该社区。</string>
+    <string name="community_create_success">社区创建成功</string>
+    <string name="community_join_success">已成功加入社区</string>
+    <string name="community_error_name_required">请输入社区名称</string>
+    <string name="community_error_code_required">请输入邀请码</string>
+    <string name="community_error_create_failed">创建社区失败，请重试</string>
+    <string name="community_error_join_failed">加入社区失败，请检查邀请码</string>
+    <string name="community_error_load_failed">加载失败</string>
+    <string name="community_error_not_loaded">社区信息未加载</string>
+
+    <!-- Community Detail -->
+    <string name="community_description_label">描述 / Description</string>
+    <string name="community_no_description">暂无描述</string>
+    <string name="community_member_count_label">成员数 / Members</string>
+    <string name="community_members">成员</string>
+    <string name="community_invite_code_label">邀请码 / Invite Code</string>
+    <string name="community_no_invite_code">暂无邀请码</string>
+    <string name="community_members_section">成员 / Members</string>
+    <string name="community_alerts_section">实时警报 / Live Alerts</string>
+    <string name="community_no_members">暂无成员</string>
+    <string name="community_no_alerts">暂无警报</string>
+    <string name="community_share">分享</string>
+    <string name="community_share_title">分享社区</string>
+    <string name="community_share_text">加入 %1$s 社区！\n\n当前成员: %2$d\n邀请码: %3$s</string>
+    <string name="community_detail_open">打开社区详情</string>
+    <string name="community_alert_detail">警报详情</string>
+
+    <!-- ClawPhones Task Market -->
+    <string name="task_list_title">任务列表 / Tasks</string>
+    <string name="task_detail_title">任务详情 / Task Detail</string>
+    <string name="task_tab_available">可接任务 / Available</string>
+    <string name="task_tab_active">进行中 / Active</string>
+    <string name="task_tab_completed">已完成 / Completed</string>
+    <string name="task_auto_accept_label">自动接单 / Auto Accept</string>
+    <string name="task_list_empty">暂无任务 / No tasks available</string>
+    <string name="task_reward_format">%.2f Credits</string>
+    <string name="task_status_available">可接 / Available</string>
+    <string name="task_status_assigned">已分配 / Assigned</string>
+    <string name="task_status_in_progress">进行中 / In Progress</string>
+    <string name="task_status_completed">已完成 / Completed</string>
+    <string name="task_status_expired">已过期 / Expired</string>
+    <string name="task_status_unknown">未知 / Unknown</string>
+    <string name="task_type_photo_survey">图片采集 / Photo Survey</string>
+    <string name="task_type_monitoring">监控巡查 / Monitoring</string>
+    <string name="task_type_environmental">环境监测 / Environmental</string>
+    <string name="task_type_traffic">交通监测 / Traffic</string>
+    <string name="task_type_retail">零售数据 / Retail</string>
+    <string name="task_type_unknown">未知类型 / Unknown</string>
+    <string name="task_description_label">任务描述 / Description</string>
+    <string name="task_requirements_label">要求 / Requirements</string>
+    <string name="task_location_label">位置 / Location</string>
+    <string name="task_location_format">%s, %s</string>
+    <string name="task_time_label">时间 / Time</string>
+    <string name="task_time_created">创建时间 / Created</string>
+    <string name="task_time_expires">截止时间 / Expires</string>
+    <string name="task_assigned_to">分配给 / Assigned to: %s</string>
+    <string name="task_progress_label">进度 / Progress</string>
+    <string name="task_progress_format">%d%%</string>
+    <string name="task_results_label">结果 / Results</string>
+    <string name="task_results_empty">暂无结果 / No results</string>
+    <string name="task_expired">任务已过期 / Task expired</string>
+    <string name="task_button_accept">接受任务 / Accept</string>
+    <string name="task_button_start">开始执行 / Start</string>
+    <string name="task_button_complete">提交完成 / Complete</string>
+
+    <!-- ClawPhones Earnings -->
+    <string name="earnings_title">收益 / Earnings</string>
+    <string name="earnings_total_label">累计收益 / Total Earned</string>
+    <string name="earnings_total_format">$%.2f</string>
+    <string name="earnings_balance_label">可提现 / Available</string>
+    <string name="earnings_balance_format">$%.2f</string>
+    <string name="earnings_completed_label">已完成 / Completed</string>
+    <string name="earnings_tasks_completed">%d tasks</string>
+    <string name="earnings_in_progress_label">进行中 / In Progress</string>
+    <string name="earnings_tasks_in_progress">%d tasks</string>
+    <string name="earnings_history_label">收益记录 / History</string>
+    <string name="earnings_empty">暂无收益记录 / No earnings yet</string>
+    <string name="earnings_error">加载失败 / Load failed: %s</string>
+
 </resources>

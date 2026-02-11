@@ -21,6 +21,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 import aiosqlite
 import bcrypt
+import h3
 import httpx
 import jwt
 from dotenv import load_dotenv
@@ -54,6 +55,7 @@ RATE_LIMITS: Dict[str, Dict[str, int]] = {
     "admin": {"requests": 5, "window": 60},
     "export": {"requests": 3, "window": 300},
     "crash": {"requests": 20, "window": 60},
+    "community": {"requests": 10, "window": 60},
     "default": {"requests": 120, "window": 60},
 }
 _RATE_LIMIT_HITS: Dict[str, List[int]] = {}
@@ -141,6 +143,13 @@ def _rate_limit_target(request: Request) -> Optional[Tuple[str, str]]:
 
     if method == "POST" and path == "/v1/crash-reports":
         return ("crash", path)
+
+    if method == "POST" and re.fullmatch(r"/v1/communities.*", path):
+        return ("community", "/v1/communities/*")
+    if method == "POST" and re.fullmatch(r"/v1/communities/[^/]+/alerts", path):
+        return ("community", "/v1/communities/{id}/alerts")
+    if method == "DELETE" and re.fullmatch(r"/v1/communities/[^/]+/members/me", path):
+        return ("community", "/v1/communities/{id}/members/me")
 
     return ("default", path)
 
@@ -1034,6 +1043,142 @@ async def _init_db() -> None:
         )
         await db.execute("CREATE INDEX IF NOT EXISTS idx_user_exports_user_created ON user_exports(user_id, created_at DESC)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_user_exports_expires ON user_exports(expires_at)")
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS communities (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT,
+              center_lat REAL,
+              center_lon REAL,
+              h3_cells TEXT,
+              invite_code TEXT UNIQUE,
+              created_by TEXT NOT NULL REFERENCES users(id),
+              created_at INTEGER NOT NULL
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_communities_created_by ON communities(created_by)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_communities_invite_code ON communities(invite_code)")
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS community_members (
+              community_id TEXT NOT NULL REFERENCES communities(id),
+              node_id TEXT NOT NULL,
+              role TEXT DEFAULT 'member' CHECK (role IN ('admin','member')),
+              joined_at INTEGER NOT NULL,
+              PRIMARY KEY (community_id, node_id)
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_community_members_node_id ON community_members(node_id)")
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS community_alerts (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              community_id TEXT NOT NULL REFERENCES communities(id),
+              alert_type TEXT NOT NULL,
+              message TEXT NOT NULL,
+              location_lat REAL,
+              location_lon REAL,
+              created_by TEXT,
+              created_at INTEGER NOT NULL
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_community_alerts_community_id ON community_alerts(community_id, created_at DESC)")
+
+        # Task Market tables
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tasks (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              description TEXT,
+              task_type TEXT NOT NULL CHECK (task_type IN ('capture','analysis','verification')),
+              requirements TEXT DEFAULT '{}',
+              reward_credits INTEGER NOT NULL DEFAULT 0,
+              reward_bonus INTEGER NOT NULL DEFAULT 0,
+              location_lat REAL,
+              location_lon REAL,
+              h3_cells TEXT,
+              schedule_start INTEGER,
+              schedule_end INTEGER,
+              max_assignments INTEGER DEFAULT 1,
+              status TEXT DEFAULT 'available' CHECK (status IN ('available','assigned','completed','expired','cancelled')),
+              publisher_key TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              expires_at INTEGER NOT NULL
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status_expires ON tasks(status, expires_at)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_publisher ON tasks(publisher_key, created_at DESC)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_h3_cells ON tasks(h3_cells)")
+
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS task_assignments (
+              task_id TEXT NOT NULL REFERENCES tasks(id),
+              node_id TEXT NOT NULL,
+              status TEXT DEFAULT 'pending' CHECK (status IN ('pending','in_progress','completed','failed','cancelled')),
+              accepted_at INTEGER,
+              completed_at INTEGER,
+              PRIMARY KEY (task_id, node_id)
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_task_assignments_node_status ON task_assignments(node_id, status)")
+
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS task_results (
+              id TEXT PRIMARY KEY,
+              task_id TEXT NOT NULL REFERENCES tasks(id),
+              node_id TEXT NOT NULL,
+              frames TEXT DEFAULT '[]',
+              metadata TEXT DEFAULT '{}',
+              credits_earned INTEGER NOT NULL DEFAULT 0,
+              completed_at INTEGER NOT NULL
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_task_results_task_id ON task_results(task_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_task_results_node_id ON task_results(node_id)")
+
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS push_queue (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              target_tokens TEXT DEFAULT '[]',
+              title TEXT NOT NULL,
+              body TEXT NOT NULL,
+              data TEXT DEFAULT '{}',
+              category TEXT NOT NULL CHECK (category IN ('task','community','system','edge_job','security')),
+              status TEXT DEFAULT 'pending' CHECK (status IN ('pending','sent','failed')),
+              created_at INTEGER NOT NULL,
+              sent_at INTEGER
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_push_queue_status_created ON push_queue(status, created_at)")
+
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notification_preferences (
+              user_id TEXT PRIMARY KEY REFERENCES users(id),
+              enabled INTEGER NOT NULL DEFAULT 1,
+              community_alerts INTEGER NOT NULL DEFAULT 1,
+              task_updates INTEGER NOT NULL DEFAULT 1,
+              edge_jobs INTEGER NOT NULL DEFAULT 1,
+              security_alerts INTEGER NOT NULL DEFAULT 1,
+              quiet_start INTEGER,
+              quiet_end INTEGER,
+              sound TEXT DEFAULT 'default'
+            )
+            """
+        )
+
         # Normalize legacy tier aliases/casing to canonical free/pro/max in-place.
         for legacy, canonical in (
             ("free", "free"),
@@ -3970,6 +4115,990 @@ async def patch_crash_report(report_id: str, request: Request) -> Any:
             raise HTTPException(status_code=404, detail="report not found")
 
     return {"id": report_id, "status": new_status}
+
+
+# -----------------------------
+# Community Endpoints
+# -----------------------------
+
+
+@app.post("/v1/communities")
+async def create_community(request: Request) -> Any:
+    """Create a new community."""
+    await _enforce_rate_limit(request)
+
+    # Verify authentication
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    name = body.get("name")
+    description = body.get("description", "")
+    center_lat = body.get("center_lat")
+    center_lon = body.get("center_lon")
+    h3_cells = body.get("h3_cells", [])
+    h3_resolution = body.get("h3_resolution", 9)
+
+    if not isinstance(name, str) or not name.strip():
+        raise HTTPException(status_code=400, detail="name required")
+
+    # Generate H3 cells from center point if not provided
+    if h3_cells and not isinstance(h3_cells, list):
+        raise HTTPException(status_code=400, detail="h3_cells must be a list")
+
+    if center_lat is not None and center_lon is not None:
+        try:
+            center_lat = float(center_lat)
+            center_lon = float(center_lon)
+            if not (-90 <= center_lat <= 90) or not (-180 <= center_lon <= 180):
+                raise HTTPException(status_code=400, detail="invalid coordinates")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="invalid coordinates")
+
+        # Generate H3 cells from center if not provided
+        if not h3_cells:
+            try:
+                center_cell = h3.latlng_to_cell(center_lat, center_lon, h3_resolution)
+                h3_cells = h3.grid_disk(center_cell, 1)  # radius 1 = immediate neighbors
+            except Exception:
+                raise HTTPException(status_code=400, detail="failed to generate h3 cells")
+    else:
+        h3_cells = []
+
+    # Generate unique invite code
+    invite_code = secrets.token_urlsafe(8)
+
+    community_id = str(uuid.uuid4())
+    now = int(time.time())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        try:
+            await db.execute(
+                """
+                INSERT INTO communities(id,name,description,center_lat,center_lon,h3_cells,invite_code,created_by,created_at)
+                VALUES (?,?,?,?,?,?,?,?,?)
+                """,
+                (community_id, name.strip(), description, center_lat, center_lon,
+                 json.dumps(h3_cells), invite_code, user_id, now),
+            )
+            # Add creator as admin
+            await db.execute(
+                """
+                INSERT INTO community_members(community_id,node_id,role,joined_at)
+                VALUES (?,?,?,?)
+                """,
+                (community_id, user_id, "admin", now),
+            )
+            await db.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="failed to create community")
+
+    return {
+        "id": community_id,
+        "name": name.strip(),
+        "description": description,
+        "center_lat": center_lat,
+        "center_lon": center_lon,
+        "h3_cells": h3_cells,
+        "invite_code": invite_code,
+        "created_by": user_id,
+        "created_at": now,
+    }
+
+
+@app.post("/v1/communities/join")
+async def join_community(request: Request) -> Any:
+    """Join a community using invite code."""
+    await _enforce_rate_limit(request)
+
+    # Verify authentication
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    invite_code = body.get("invite_code")
+    node_id = body.get("node_id", user_id)
+
+    if not isinstance(invite_code, str) or not invite_code.strip():
+        raise HTTPException(status_code=400, detail="invite_code required")
+
+    now = int(time.time())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id FROM communities WHERE invite_code=?",
+            (invite_code.strip(),),
+        ) as cur:
+            row = await cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="invalid invite code")
+            community_id = row["id"]
+
+        try:
+            await db.execute(
+                """
+                INSERT INTO community_members(community_id,node_id,role,joined_at)
+                VALUES (?,?,?,?)
+                """,
+                (community_id, node_id, "member", now),
+            )
+            await db.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="already a member")
+
+    return {"community_id": community_id, "node_id": node_id, "role": "member", "joined_at": now}
+
+
+@app.get("/v1/communities/mine")
+async def get_my_communities(request: Request) -> Any:
+    """Get communities the user is a member of."""
+    # Verify authentication
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT c.id, c.name, c.description, c.center_lat, c.center_lon,
+                   c.h3_cells, c.invite_code, c.created_by, c.created_at,
+                   cm.role
+            FROM communities c
+            INNER JOIN community_members cm ON c.id = cm.community_id
+            WHERE cm.node_id = ?
+            ORDER BY c.created_at DESC
+            """,
+            (user_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+
+    communities = []
+    for row in rows:
+        d = dict(row)
+        d["h3_cells"] = json.loads(d["h3_cells"]) if d["h3_cells"] else []
+        communities.append(d)
+
+    return {"communities": communities, "count": len(communities)}
+
+
+@app.get("/v1/communities/{community_id}")
+async def get_community(community_id: str, request: Request) -> Any:
+    """Get a community by ID."""
+    # Verify authentication
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT c.id, c.name, c.description, c.center_lat, c.center_lon,
+                   c.h3_cells, c.invite_code, c.created_by, c.created_at,
+                   cm.role
+            FROM communities c
+            LEFT JOIN community_members cm ON c.id = cm.community_id AND cm.node_id = ?
+            WHERE c.id = ?
+            """,
+            (user_id, community_id),
+        ) as cur:
+            row = await cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="community not found")
+
+    d = dict(row)
+    d["h3_cells"] = json.loads(d["h3_cells"]) if d["h3_cells"] else []
+    return d
+
+
+@app.delete("/v1/communities/{community_id}/members/me", status_code=204)
+async def leave_community(community_id: str, request: Request) -> Any:
+    """Leave a community."""
+    await _enforce_rate_limit(request)
+
+    # Verify authentication
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        result = await db.execute(
+            "DELETE FROM community_members WHERE community_id=? AND node_id=?",
+            (community_id, user_id),
+        )
+        await db.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="not a member of this community")
+
+    return Response(status_code=204)
+
+
+@app.post("/v1/communities/{community_id}/alerts")
+async def create_community_alert(community_id: str, request: Request) -> Any:
+    """Create an alert in a community."""
+    await _enforce_rate_limit(request)
+
+    # Verify authentication
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    alert_type = body.get("alert_type")
+    message = body.get("message")
+    location_lat = body.get("location_lat")
+    location_lon = body.get("location_lon")
+
+    if not isinstance(alert_type, str) or not alert_type.strip():
+        raise HTTPException(status_code=400, detail="alert_type required")
+    if not isinstance(message, str) or not message.strip():
+        raise HTTPException(status_code=400, detail="message required")
+
+    # Verify coordinates if provided
+    if location_lat is not None and location_lon is not None:
+        try:
+            location_lat = float(location_lat)
+            location_lon = float(location_lon)
+            if not (-90 <= location_lat <= 90) or not (-180 <= location_lon <= 180):
+                raise HTTPException(status_code=400, detail="invalid coordinates")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="invalid coordinates")
+
+    now = int(time.time())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        # Verify user is a member
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT role FROM community_members WHERE community_id=? AND node_id=?",
+            (community_id, user_id),
+        ) as cur:
+            row = await cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=403, detail="not a member of this community")
+
+        await db.execute(
+            """
+            INSERT INTO community_alerts(community_id,alert_type,message,location_lat,location_lon,created_by,created_at)
+            VALUES (?,?,?,?,?,?,?)
+            """,
+            (community_id, alert_type.strip(), message.strip(),
+             location_lat, location_lon, user_id, now),
+        )
+        await db.commit()
+
+    return {"community_id": community_id, "alert_type": alert_type.strip(), "message": message.strip(), "created_at": now}
+
+
+@app.get("/v1/communities/{community_id}/alerts")
+async def get_community_alerts(community_id: str, request: Request, limit: int = 50) -> Any:
+    """Get alerts for a community."""
+    # Verify authentication
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    if not isinstance(limit, int) or limit < 1 or limit > 100:
+        limit = 50
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        # Verify user is a member
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT role FROM community_members WHERE community_id=? AND node_id=?",
+            (community_id, user_id),
+        ) as cur:
+            row = await cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=403, detail="not a member of this community")
+
+        async with db.execute(
+            """
+            SELECT id, community_id, alert_type, message, location_lat, location_lon, created_by, created_at
+            FROM community_alerts
+            WHERE community_id=?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (community_id, limit),
+        ) as cur:
+            rows = await cur.fetchall()
+
+    alerts = [dict(r) for r in rows]
+    return {"alerts": alerts, "count": len(alerts)}
+
+
+# ========================
+# Task Market Endpoints
+# ========================
+
+@app.post("/v1/tasks")
+async def create_task(request: Request) -> Any:
+    """Create a new task (publisher only)."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    # Verify publisher key
+    body = await request.json()
+    publisher_key = body.get("publisher_key")
+    if not publisher_key:
+        raise HTTPException(status_code=400, detail="publisher_key is required")
+
+    title = body.get("title", "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+
+    task_type = body.get("task_type", "").strip()
+    if task_type not in ("capture", "analysis", "verification"):
+        raise HTTPException(status_code=400, detail="task_type must be capture, analysis, or verification")
+
+    reward_credits = int(body.get("reward_credits", 0))
+    if reward_credits < 0:
+        raise HTTPException(status_code=400, detail="reward_credits must be non-negative")
+
+    now = int(time.time())
+    expires_at = int(body.get("expires_at", now + 7 * 86400))
+    if expires_at <= now:
+        raise HTTPException(status_code=400, detail="expires_at must be in the future")
+
+    task_id = str(uuid.uuid4())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO tasks (id, title, description, task_type, requirements, reward_credits, reward_bonus,
+                              location_lat, location_lon, h3_cells, schedule_start, schedule_end, max_assignments,
+                              status, publisher_key, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                task_id,
+                title,
+                body.get("description", "").strip(),
+                task_type,
+                json.dumps(body.get("requirements", {})),
+                reward_credits,
+                int(body.get("reward_bonus", 0)),
+                body.get("location_lat"),
+                body.get("location_lon"),
+                body.get("h3_cells"),
+                body.get("schedule_start"),
+                body.get("schedule_end"),
+                int(body.get("max_assignments", 1)),
+                "available",
+                publisher_key,
+                now,
+                expires_at,
+            ),
+        )
+        await db.commit()
+
+    return {"task_id": task_id, "status": "created"}
+
+
+@app.get("/v1/tasks/available")
+async def get_available_tasks(request: Request) -> Any:
+    """Get list of available tasks."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    now = int(time.time())
+    limit = min(int(request.query_params.get("limit", 20)), 50)
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT t.*,
+                   (SELECT COUNT(*) FROM task_assignments WHERE task_id=t.id) as assignments_count
+            FROM tasks t
+            WHERE t.status='available' AND t.expires_at > ?
+            ORDER BY t.reward_credits DESC, t.created_at DESC
+            LIMIT ?
+            """,
+            (now, limit),
+        ) as cur:
+            rows = await cur.fetchall()
+
+    tasks = []
+    for r in rows:
+        task = dict(r)
+        # Exclude internal fields from response
+        task.pop("assignments_count", None)
+        task["requirements"] = json.loads(task.get("requirements", "{}"))
+        task["h3_cells"] = json.loads(task.get("h3_cells", "[]"))
+        tasks.append(task)
+
+    return {"tasks": tasks, "count": len(tasks)}
+
+
+@app.post("/v1/tasks/{task_id}/accept")
+async def accept_task(task_id: str, request: Request) -> Any:
+    """Accept a task assignment (max 3 concurrent tasks)."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    now = int(time.time())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        # Check task exists and is available
+        async with db.execute(
+            "SELECT * FROM tasks WHERE id=? AND status='available' AND expires_at > ?",
+            (task_id, now),
+        ) as cur:
+            task = await cur.fetchone()
+            if not task:
+                raise HTTPException(status_code=404, detail="task not found or unavailable")
+
+        # Check user has fewer than 3 active assignments
+        async with db.execute(
+            "SELECT COUNT(*) as count FROM task_assignments WHERE node_id=? AND status IN ('pending','in_progress')",
+            (user_id,),
+        ) as cur:
+            count = (await cur.fetchone())["count"]
+            if count >= 3:
+                raise HTTPException(status_code=400, detail="maximum 3 concurrent task assignments")
+
+        # Check if already assigned
+        async with db.execute(
+            "SELECT status FROM task_assignments WHERE task_id=? AND node_id=?",
+            (task_id, user_id),
+        ) as cur:
+            existing = await cur.fetchone()
+            if existing:
+                raise HTTPException(status_code=400, detail="already assigned to this task")
+
+        # Check task assignment limit
+        max_assignments = task["max_assignments"] or 1
+        async with db.execute(
+            "SELECT COUNT(*) as count FROM task_assignments WHERE task_id=? AND status!='cancelled'",
+            (task_id,),
+        ) as cur:
+            assignment_count = (await cur.fetchone())["count"]
+            if assignment_count >= max_assignments:
+                raise HTTPException(status_code=400, detail="task is fully assigned")
+
+        # Create assignment
+        try:
+            await db.execute(
+                "INSERT INTO task_assignments (task_id, node_id, status, accepted_at) VALUES (?, ?, ?, ?)",
+                (task_id, user_id, "pending", now),
+            )
+            await db.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=400, detail="assignment already exists")
+
+    return {"task_id": task_id, "status": "accepted", "accepted_at": now}
+
+
+@app.post("/v1/tasks/{task_id}/results")
+async def submit_task_result(task_id: str, request: Request) -> Any:
+    """Submit task results."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    now = int(time.time())
+    body = await request.json()
+
+    frames = body.get("frames", [])
+    if not isinstance(frames, list):
+        raise HTTPException(status_code=400, detail="frames must be an array")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        # Verify assignment exists
+        async with db.execute(
+            "SELECT ta.*, t.reward_credits, t.reward_bonus FROM task_assignments ta JOIN tasks t ON ta.task_id=t.id WHERE ta.task_id=? AND ta.node_id=? AND ta.status IN ('pending','in_progress')",
+            (task_id, user_id),
+        ) as cur:
+            assignment = await cur.fetchone()
+            if not assignment:
+                raise HTTPException(status_code=404, detail="assignment not found")
+
+        # Create result
+        result_id = str(uuid.uuid4())
+        credits_earned = assignment["reward_credits"] + assignment["reward_bonus"]
+
+        await db.execute(
+            "INSERT INTO task_results (id, task_id, node_id, frames, metadata, credits_earned, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                result_id,
+                task_id,
+                user_id,
+                json.dumps(frames),
+                json.dumps(body.get("metadata", {})),
+                credits_earned,
+                now,
+            ),
+        )
+
+        # Update assignment status
+        await db.execute(
+            "UPDATE task_assignments SET status='completed', completed_at=? WHERE task_id=? AND node_id=?",
+            (now, task_id, user_id),
+        )
+
+        await db.commit()
+
+    return {"result_id": result_id, "credits_earned": credits_earned, "completed_at": now}
+
+
+@app.get("/v1/tasks/mine")
+async def get_my_tasks(request: Request) -> Any:
+    """Get tasks assigned to the authenticated user."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT ta.task_id, ta.status, ta.accepted_at, ta.completed_at,
+                   t.title, t.task_type, t.reward_credits, t.expires_at
+            FROM task_assignments ta
+            JOIN tasks t ON ta.task_id=t.id
+            WHERE ta.node_id=?
+            ORDER BY ta.accepted_at DESC
+            """,
+            (user_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+
+    tasks = [dict(r) for r in rows]
+    return {"tasks": tasks, "count": len(tasks)}
+
+
+@app.get("/v1/tasks/earnings")
+async def get_my_earnings(request: Request) -> Any:
+    """Get total earnings for the authenticated user."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT SUM(credits_earned) as total, COUNT(*) as completed_tasks FROM task_results WHERE node_id=?",
+            (user_id,),
+        ) as cur:
+            row = await cur.fetchone()
+
+    total_credits = row["total"] or 0
+    completed_tasks = row["completed_tasks"] or 0
+
+    return {"total_credits": total_credits, "completed_tasks": completed_tasks}
+
+
+@app.get("/v1/tasks/{task_id}")
+async def get_task(task_id: str, request: Request) -> Any:
+    """Get details of a specific task."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)) as cur:
+            row = await cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="task not found")
+
+    task = dict(row)
+    task["requirements"] = json.loads(task.get("requirements", "{}"))
+    task["h3_cells"] = json.loads(task.get("h3_cells", "[]"))
+
+    return task
+
+
+# ========================
+# Push Notification Endpoints
+# ========================
+
+@app.post("/v1/push/register")
+async def register_push_device(request: Request) -> Any:
+    """Register/update push notification device token."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    body = await request.json()
+    platform = body.get("platform", "").strip().lower()
+    if platform not in ("ios", "android"):
+        raise HTTPException(status_code=400, detail="platform must be ios or android")
+
+    push_token = body.get("push_token", "").strip()
+    if not push_token:
+        raise HTTPException(status_code=400, detail="push_token is required")
+
+    now = int(time.time())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        # Upsert: delete existing token for this platform, then insert
+        await db.execute(
+            "DELETE FROM push_tokens WHERE user_id=? AND platform=?",
+            (user_id, platform),
+        )
+        await db.execute(
+            "INSERT INTO push_tokens (user_id, platform, push_token, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, platform, push_token, now),
+        )
+        await db.commit()
+
+    return {"status": "registered", "platform": platform}
+
+
+@app.get("/v1/push/preferences")
+async def get_push_preferences(request: Request) -> Any:
+    """Get push notification preferences."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM notification_preferences WHERE user_id=?",
+            (user_id,),
+        ) as cur:
+            row = await cur.fetchone()
+
+    if not row:
+        # Return default preferences
+        return {
+            "enabled": True,
+            "community_alerts": True,
+            "task_updates": True,
+            "edge_jobs": True,
+            "security_alerts": True,
+            "quiet_start": None,
+            "quiet_end": None,
+            "sound": "default",
+        }
+
+    prefs = dict(row)
+    # Convert integer booleans
+    for k in ["enabled", "community_alerts", "task_updates", "edge_jobs", "security_alerts"]:
+        if k in prefs and prefs[k] is not None:
+            prefs[k] = bool(prefs[k])
+
+    return prefs
+
+
+@app.put("/v1/push/preferences")
+async def update_push_preferences(request: Request) -> Any:
+    """Update push notification preferences."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authorization required")
+    token = auth_header.replace("Bearer ", "").strip()
+    token_row = await _get_token_row(token)
+    if not token_row:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    user_id = token_row.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    body = await request.json()
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        # Check existing
+        async with db.execute(
+            "SELECT * FROM notification_preferences WHERE user_id=?",
+            (user_id,),
+        ) as cur:
+            existing = await cur.fetchone()
+
+        if existing:
+            # Update existing
+            updates = []
+            params = []
+            if "enabled" in body:
+                updates.append("enabled=?")
+                params.append(1 if body["enabled"] else 0)
+            if "community_alerts" in body:
+                updates.append("community_alerts=?")
+                params.append(1 if body["community_alerts"] else 0)
+            if "task_updates" in body:
+                updates.append("task_updates=?")
+                params.append(1 if body["task_updates"] else 0)
+            if "edge_jobs" in body:
+                updates.append("edge_jobs=?")
+                params.append(1 if body["edge_jobs"] else 0)
+            if "security_alerts" in body:
+                updates.append("security_alerts=?")
+                params.append(1 if body["security_alerts"] else 0)
+            if "quiet_start" in body:
+                updates.append("quiet_start=?")
+                params.append(body["quiet_start"])
+            if "quiet_end" in body:
+                updates.append("quiet_end=?")
+                params.append(body["quiet_end"])
+            if "sound" in body:
+                updates.append("sound=?")
+                params.append(body["sound"])
+
+            if updates:
+                params.append(user_id)
+                await db.execute(
+                    f"UPDATE notification_preferences SET {', '.join(updates)} WHERE user_id=?",
+                    params,
+                )
+        else:
+            # Insert new
+            await db.execute(
+                """
+                INSERT INTO notification_preferences (user_id, enabled, community_alerts, task_updates,
+                                                      edge_jobs, security_alerts, quiet_start, quiet_end, sound)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    1 if body.get("enabled", True) else 0,
+                    1 if body.get("community_alerts", True) else 0,
+                    1 if body.get("task_updates", True) else 0,
+                    1 if body.get("edge_jobs", True) else 0,
+                    1 if body.get("security_alerts", True) else 0,
+                    body.get("quiet_start"),
+                    body.get("quiet_end"),
+                    body.get("sound", "default"),
+                ),
+            )
+
+        await db.commit()
+
+    return {"status": "updated"}
+
+
+@app.post("/v1/push/send")
+async def send_push_notification(request: Request) -> Any:
+    """Send a push notification (admin only)."""
+    # Verify admin key
+    admin_key = request.headers.get("x-admin-key", "")
+    if not admin_key or admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="admin key required")
+
+    body = await request.json()
+    title = body.get("title", "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+
+    message = body.get("body", "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="body is required")
+
+    category = body.get("category", "").strip()
+    if category not in ("task", "community", "system", "edge_job", "security"):
+        raise HTTPException(status_code=400, detail="invalid category")
+
+    now = int(time.time())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO push_queue (target_tokens, title, body, data, category, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                json.dumps(body.get("target_tokens", [])),
+                title,
+                message,
+                json.dumps(body.get("data", {})),
+                category,
+                "pending",
+                now,
+            ),
+        )
+        await db.commit()
+
+    return {"status": "queued", "created_at": now}
+
+
+@app.get("/v1/push/history")
+async def get_push_history(request: Request) -> Any:
+    """Get push notification history (admin only)."""
+    # Verify admin key
+    admin_key = request.headers.get("x-admin-key", "")
+    if not admin_key or admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="admin key required")
+
+    limit = min(int(request.query_params.get("limit", 20)), 100)
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT * FROM push_queue
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ) as cur:
+            rows = await cur.fetchall()
+
+    notifications = []
+    for r in rows:
+        notif = dict(r)
+        notif["target_tokens"] = json.loads(notif.get("target_tokens", "[]"))
+        notif["data"] = json.loads(notif.get("data", "{}"))
+        notifications.append(notif)
+
+    return {"notifications": notifications, "count": len(notifications)}
 
 
 if __name__ == "__main__":

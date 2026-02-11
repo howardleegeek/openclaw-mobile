@@ -178,6 +178,39 @@
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 
         <activity
+            android:name="ai.clawphones.agent.chat.TaskListActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.TaskDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.EarningsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.EdgeComputeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.CommunityListActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.CommunityDetailActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
             android:name="ai.clawphones.agent.DashboardActivity"
             android:exported="false"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
@@ -199,6 +232,14 @@
             android:name="ai.clawphones.agent.chat.NodeModeService"
             android:exported="false"
             android:foregroundServiceType="camera|location|dataSync" />
+
+        <service
+            android:name="ai.clawphones.agent.chat.PushNotificationService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <activity
             android:name=".app.activities.HelpActivity"

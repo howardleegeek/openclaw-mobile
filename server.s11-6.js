@@ -3,8 +3,9 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { WebSocketServer } from 'ws';
 
-import { latLngToCell } from 'h3-js';
+import { latLngToCell, kRing } from 'h3-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,8 +13,11 @@ const __dirname = dirname(__filename);
 // Local dev storage (no DB yet): JSON files + JSONL event log.
 const DATA_DIR = join(__dirname, '..', 'data');
 const NODES_PATH = join(DATA_DIR, 'nodes.json');
+const COMMUNITIES_PATH = join(DATA_DIR, 'communities.json');
 const EVENTS_PATH = join(DATA_DIR, 'events.jsonl');
 const BLOBS_DIR = join(DATA_DIR, 'blobs');
+const PUSH_TOKENS_PATH = join(DATA_DIR, 'push-tokens.json');
+const PUSH_QUEUE_PATH = join(DATA_DIR, 'push-queue.json');
 
 mkdirSync(DATA_DIR, { recursive: true });
 mkdirSync(BLOBS_DIR, { recursive: true });
@@ -39,6 +43,22 @@ const ONLINE_WINDOW_MS = 10 * 60 * 1000;
 // In-memory runtime state (MVP): node heartbeats/health.
 const nodeHeartbeats = new Map(); // node_id -> { ...status }
 
+// WebSocket clients: community_id -> Set<WebSocket>
+const wsCommunityRooms = new Map();
+// WebSocket to community_id mapping for cleanup
+const wsToCommunityId = new WeakMap();
+
+function broadcastToCommunity(community_id, message) {
+  const clients = wsCommunityRooms.get(community_id);
+  if (!clients) return;
+  const payload = JSON.stringify(message);
+  for (const ws of clients) {
+    if (ws.readyState === 1) { // OPEN
+      ws.send(payload);
+    }
+  }
+}
+
 function applyCors(res) {
   if (!CORS_ALLOW_ORIGIN) return;
   res.setHeader('access-control-allow-origin', CORS_ALLOW_ORIGIN);
@@ -53,6 +73,15 @@ function loadNodes() {
 
 function saveNodes(nodes) {
   writeFileSync(NODES_PATH, JSON.stringify(nodes, null, 2) + '\n');
+}
+
+function loadCommunities() {
+  if (!existsSync(COMMUNITIES_PATH)) return { communities: {} };
+  return JSON.parse(readFileSync(COMMUNITIES_PATH, 'utf8'));
+}
+
+function saveCommunities(communities) {
+  writeFileSync(COMMUNITIES_PATH, JSON.stringify(communities, null, 2) + '\n');
 }
 
 function json(res, status, obj) {
@@ -213,6 +242,50 @@ function normalizeEvent(body) {
     },
     jpegBytes
   };
+}
+
+function loadPushTokens() {
+  if (!existsSync(PUSH_TOKENS_PATH)) return { tokens: {} };
+  try {
+    return JSON.parse(readFileSync(PUSH_TOKENS_PATH, 'utf8'));
+  } catch {
+    return { tokens: {} };
+  }
+}
+
+function savePushTokens(data) {
+  try {
+    writeFileSync(PUSH_TOKENS_PATH, JSON.stringify(data, null, 2) + '\n');
+  } catch {
+    // Silent fail for MVP
+  }
+}
+
+function loadPushQueue() {
+  if (!existsSync(PUSH_QUEUE_PATH)) return { queue: [] };
+  try {
+    return JSON.parse(readFileSync(PUSH_QUEUE_PATH, 'utf8'));
+  } catch {
+    return { queue: [] };
+  }
+}
+
+function savePushQueue(data) {
+  try {
+    writeFileSync(PUSH_QUEUE_PATH, JSON.stringify(data, null, 2) + '\n');
+  } catch {
+    // Silent fail for MVP
+  }
+}
+
+function addToPushQueue(item) {
+  const data = loadPushQueue();
+  data.queue.push({
+    ...item,
+    id: newId('push'),
+    created_at: nowIso()
+  });
+  savePushQueue(data);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -476,6 +549,26 @@ const server = http.createServer(async (req, res) => {
       location: { lat, lon },
       events_detected: typeof prev?.events_detected === 'number' ? prev.events_detected + 1 : prev?.events_detected ?? 1
     });
+
+    // Broadcast to WebSocket clients in matching communities
+    const matchingCommunities = findCommunitiesForCell(cell);
+    for (const community_id of matchingCommunities) {
+      broadcastToCommunity(community_id, {
+        type: 'vision_event',
+        community_id,
+        event: {
+          id: evt.id,
+          ts: evt.ts,
+          node_id: evt.node_id,
+          lat: evt.lat,
+          lon: evt.lon,
+          cell: evt.cell,
+          event_type: evt.event_type,
+          confidence: evt.confidence,
+          jpeg_blob: evt.jpeg_blob
+        }
+      });
+    }
 
     return json(res, 200, { ok: true, event_id, cell });
   }
@@ -869,10 +962,523 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, events });
   }
 
+  // ===== COMMUNITIES =====
+
+  // Generate 8-char invite code from random bytes
+  function generateInviteCode() {
+    return randomBytes(4).toString('hex');
+  }
+
+  // Authenticate node from bearer token and return node_id
+  function authenticateNode(token) {
+    if (!token) return null;
+    const nodesDb = loadNodes();
+    const node = Object.values(nodesDb.nodes).find((n) => n.token === token);
+    return node?.node_id || null;
+  }
+
+  // Find communities that include the given cell
+  function findCommunitiesForCell(cell) {
+    const communitiesDb = loadCommunities();
+    const matchingCommunities = [];
+    for (const [cid, com] of Object.entries(communitiesDb.communities || {})) {
+      if (com?.h3_cells?.includes(cell)) {
+        matchingCommunities.push(cid);
+      }
+    }
+    return matchingCommunities;
+  }
+
+  // POST /v1/communities - create community
+  // { name, lat, lon, radius_km=5 }
+  if (req.method === 'POST' && url.pathname === '/v1/communities') {
+    const token = getAuthToken(req);
+    const node_id = authenticateNode(token);
+    if (!node_id) return json(res, 401, { ok: false, error: 'missing or invalid bearer token' });
+
+    const body = await readJson(req);
+    if (body?.__parse_error) {
+      return json(res, 400, { ok: false, error: 'invalid json' });
+    }
+
+    const name = typeof body?.name === 'string' ? body.name.trim() : '';
+    if (!name) return json(res, 400, { ok: false, error: 'missing name' });
+
+    const lat = clampNumber(Number(body?.lat), -90, 90);
+    const lon = clampNumber(Number(body?.lon), -180, 180);
+    if (lat == null || lon == null) {
+      return json(res, 400, { ok: false, error: 'missing or invalid lat/lon' });
+    }
+
+    const radiusKm = Number(body?.radius_km ?? 5);
+    if (!Number.isFinite(radiusKm) || radiusKm < 0.1 || radiusKm > 100) {
+      return json(res, 400, { ok: false, error: 'invalid radius_km (expected 0.1..100)' });
+    }
+
+    // Generate H3 cells for the community (kRing at res 9)
+    const h3Res = 9;
+    const centerCell = latLngToCell(lat, lon, h3Res);
+    // Approx kRing radius: k=1 is ~2-3km at res9, so k≈radius/2
+    const kRingSize = Math.max(1, Math.round(radiusKm / 2));
+    const h3Cells = kRing(centerCell, kRingSize);
+
+    const communitiesDb = loadCommunities();
+    const community_id = newId('com');
+    const inviteCode = generateInviteCode();
+
+    communitiesDb.communities[community_id] = {
+      community_id,
+      name,
+      lat,
+      lon,
+      radius_km: radiusKm,
+      h3_res: h3Res,
+      h3_cells: h3Cells,
+      invite_code: inviteCode,
+      created_by: node_id,
+      created_at: nowIso(),
+      members: { [node_id]: { node_id, joined_at: nowIso(), role: 'admin' } }
+    };
+    saveCommunities(communitiesDb);
+
+    return json(res, 201, {
+      ok: true,
+      community_id,
+      name,
+      invite_code: inviteCode,
+      h3_cells: h3Cells.length,
+      created_at: nowIso()
+    });
+  }
+
+  // POST /v1/communities/join - join by invite code
+  // { invite_code }
+  if (req.method === 'POST' && url.pathname === '/v1/communities/join') {
+    const token = getAuthToken(req);
+    const node_id = authenticateNode(token);
+    if (!node_id) return json(res, 401, { ok: false, error: 'missing or invalid bearer token' });
+
+    const body = await readJson(req);
+    if (body?.__parse_error) {
+      return json(res, 400, { ok: false, error: 'invalid json' });
+    }
+
+    const inviteCode = typeof body?.invite_code === 'string' ? body.invite_code.trim() : '';
+    if (!inviteCode) return json(res, 400, { ok: false, error: 'missing invite_code' });
+
+    const communitiesDb = loadCommunities();
+    let foundCommunityId = null;
+    for (const [cid, com] of Object.entries(communitiesDb.communities || {})) {
+      if (com?.invite_code === inviteCode) {
+        foundCommunityId = cid;
+        break;
+      }
+    }
+
+    if (!foundCommunityId) {
+      return json(res, 404, { ok: false, error: 'invalid invite_code' });
+    }
+
+    const community = communitiesDb.communities[foundCommunityId];
+    if (community.members?.[node_id]) {
+      return json(res, 400, { ok: false, error: 'already a member of this community' });
+    }
+
+    community.members[node_id] = { node_id, joined_at: nowIso(), role: 'member' };
+    saveCommunities(communitiesDb);
+
+    return json(res, 200, {
+      ok: true,
+      community_id: foundCommunityId,
+      name: community.name,
+      joined_at: nowIso()
+    });
+  }
+
+  // GET /v1/communities/mine - list my communities
+  if (req.method === 'GET' && url.pathname === '/v1/communities/mine') {
+    const token = getAuthToken(req);
+    const node_id = authenticateNode(token);
+    if (!node_id) return json(res, 401, { ok: false, error: 'missing or invalid bearer token' });
+
+    const communitiesDb = loadCommunities();
+    const myCommunities = [];
+    for (const [cid, com] of Object.entries(communitiesDb.communities || {})) {
+      if (com?.members?.[node_id]) {
+        myCommunities.push({
+          community_id: cid,
+          name: com.name,
+          lat: com.lat,
+          lon: com.lon,
+          radius_km: com.radius_km,
+          role: com.members[node_id].role,
+          joined_at: com.members[node_id].joined_at,
+          created_at: com.created_at,
+          member_count: Object.keys(com.members || {}).length
+        });
+      }
+    }
+
+    myCommunities.sort((a, b) => Date.parse(b.joined_at) - Date.parse(a.joined_at));
+    return json(res, 200, { ok: true, communities: myCommunities });
+  }
+
+  // GET /v1/communities/:id - community detail
+  if (req.method === 'GET' && url.pathname.match(/^\/v1\/communities\/[a-z]+_[a-f0-9]+$/)) {
+    const token = getAuthToken(req);
+    const node_id = authenticateNode(token);
+    if (!node_id) return json(res, 401, { ok: false, error: 'missing or invalid bearer token' });
+
+    const community_id = url.pathname.split('/')[3];
+    const communitiesDb = loadCommunities();
+    const community = communitiesDb.communities?.[community_id];
+
+    if (!community) {
+      return json(res, 404, { ok: false, error: 'community not found' });
+    }
+
+    if (!community.members?.[node_id]) {
+      return json(res, 403, { ok: false, error: 'not a member of this community' });
+    }
+
+    const members = Object.values(community.members || {}).map((m) => ({
+      node_id: m.node_id,
+      role: m.role,
+      joined_at: m.joined_at
+    }));
+
+    return json(res, 200, {
+      ok: true,
+      community_id: community.community_id,
+      name: community.name,
+      lat: community.lat,
+      lon: community.lon,
+      radius_km: community.radius_km,
+      h3_res: community.h3_res,
+      h3_cells: community.h3_cells,
+      created_by: community.created_by,
+      created_at: community.created_at,
+      members,
+      member_count: members.length
+    });
+  }
+
+  // GET /v1/communities/:id/alerts - filter events by community h3Cells
+  // ?limit=50
+  if (req.method === 'GET' && url.pathname.match(/^\/v1\/communities\/[a-z]+_[a-f0-9]+\/alerts$/)) {
+    const token = getAuthToken(req);
+    const node_id = authenticateNode(token);
+    if (!node_id) return json(res, 401, { ok: false, error: 'missing or invalid bearer token' });
+
+    const community_id = url.pathname.split('/')[3];
+    const communitiesDb = loadCommunities();
+    const community = communitiesDb.communities?.[community_id];
+
+    if (!community) {
+      return json(res, 404, { ok: false, error: 'community not found' });
+    }
+
+    if (!community.members?.[node_id]) {
+      return json(res, 403, { ok: false, error: 'not a member of this community' });
+    }
+
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? '50')));
+    const communityCells = new Set(community.h3_cells || []);
+
+    if (!existsSync(EVENTS_PATH) || communityCells.size === 0) {
+      return json(res, 200, { ok: true, events: [] });
+    }
+
+    const lines = readFileSync(EVENTS_PATH, 'utf8').trim().split('\n');
+    const events = [];
+    for (let i = lines.length - 1; i >= 0 && events.length < limit; i--) {
+      const line = lines[i];
+      if (!line) continue;
+      try {
+        const evt = JSON.parse(line);
+        if (communityCells.has(evt.cell)) {
+          const preview_url = evt.jpeg_blob ? `/v1/${evt.jpeg_blob}` : null;
+          events.push({ ...evt, preview_url });
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return json(res, 200, { ok: true, events });
+  }
+
+  // POST /v1/communities/:id/alerts - broadcast alert
+  // { message, type='alert', lat?, lon? }
+  if (req.method === 'POST' && url.pathname.match(/^\/v1\/communities\/[a-z]+_[a-f0-9]+\/alerts$/)) {
+    const token = getAuthToken(req);
+    const node_id = authenticateNode(token);
+    if (!node_id) return json(res, 401, { ok: false, error: 'missing or invalid bearer token' });
+
+    const community_id = url.pathname.split('/')[3];
+    const communitiesDb = loadCommunities();
+    const community = communitiesDb.communities?.[community_id];
+
+    if (!community) {
+      return json(res, 404, { ok: false, error: 'community not found' });
+    }
+
+    if (!community.members?.[node_id]) {
+      return json(res, 403, { ok: false, error: 'not a member of this community' });
+    }
+
+    const body = await readJson(req);
+    if (body?.__parse_error) {
+      return json(res, 400, { ok: false, error: 'invalid json' });
+    }
+
+    const message = typeof body?.message === 'string' ? body.message.trim() : '';
+    if (!message) return json(res, 400, { ok: false, error: 'missing message' });
+
+    const type = typeof body?.type === 'string' ? body.type.trim() : 'alert';
+    const lat = body?.lat != null ? clampNumber(Number(body.lat), -90, 90) : null;
+    const lon = body?.lon != null ? clampNumber(Number(body.lon), -180, 180) : null;
+
+    // If lat/lon provided, must use community cell
+    let cell = null;
+    if (lat != null && lon != null) {
+      const h3Res = community.h3_res || 9;
+      cell = latLngToCell(lat, lon, h3Res);
+    }
+
+    const evt = {
+      id: newId('evt'),
+      type: 'alert',
+      community_id,
+      ts: nowIso(),
+      node_id,
+      message,
+      alert_type: type,
+      lat,
+      lon,
+      cell,
+      h3_res: community.h3_res || 9
+    };
+
+    appendFileSync(EVENTS_PATH, JSON.stringify(evt) + '\n');
+
+    // Broadcast to WebSocket clients in this community
+    broadcastToCommunity(community_id, {
+      type: 'community_alert',
+      community_id,
+      alert: {
+        id: evt.id,
+        ts: evt.ts,
+        node_id: evt.node_id,
+        message: evt.message,
+        alert_type: evt.alert_type,
+        lat: evt.lat,
+        lon: evt.lon,
+        cell: evt.cell
+      }
+    });
+
+    return json(res, 200, { ok: true, id: evt.id, ts: evt.ts });
+  }
+
+  // DELETE /v1/communities/:id/members/me - leave community
+  if (req.method === 'DELETE' && url.pathname.match(/^\/v1\/communities\/[a-z]+_[a-f0-9]+\/members\/me$/)) {
+    const token = getAuthToken(req);
+    const node_id = authenticateNode(token);
+    if (!node_id) return json(res, 401, { ok: false, error: 'missing or invalid bearer token' });
+
+    const community_id = url.pathname.split('/')[3];
+    const communitiesDb = loadCommunities();
+    const community = communitiesDb.communities?.[community_id];
+
+    if (!community) {
+      return json(res, 404, { ok: false, error: 'community not found' });
+    }
+
+    if (!community.members?.[node_id]) {
+      return json(res, 400, { ok: false, error: 'not a member of this community' });
+    }
+
+    delete community.members[node_id];
+    saveCommunities(communitiesDb);
+
+    return json(res, 200, { ok: true, message: 'left community' });
+  }
+
+  // ===== PUSH NOTIFICATIONS =====
+
+  // POST /v1/push/register - register push token
+  // { token, platform }
+  if (req.method === 'POST' && url.pathname === '/v1/push/register') {
+    const token = getAuthToken(req);
+    const node_id = authenticateNode(token);
+    if (!node_id) return json(res, 401, { ok: false, error: 'missing or invalid bearer token' });
+
+    const body = await readJson(req);
+    if (body?.__parse_error) {
+      return json(res, 400, { ok: false, error: 'invalid json' });
+    }
+
+    const pushToken = typeof body?.token === 'string' ? body.token.trim() : '';
+    if (!pushToken) return json(res, 400, { ok: false, error: 'missing token' });
+
+    const platform = typeof body?.platform === 'string' ? body.platform.trim() : '';
+    if (!platform) return json(res, 400, { ok: false, error: 'missing platform' });
+
+    const data = loadPushTokens();
+    data.tokens[node_id] = {
+      node_id,
+      token: pushToken,
+      platform,
+      registered_at: nowIso()
+    };
+    savePushTokens(data);
+
+    return json(res, 200, { ok: true, node_id });
+  }
+
+  // POST /v1/push/send - queue push notification
+  // { community_id?, node_id?, title, body, data? }
+  if (req.method === 'POST' && url.pathname === '/v1/push/send') {
+    const token = getAuthToken(req);
+    const node_id = authenticateNode(token);
+    if (!node_id) return json(res, 401, { ok: false, error: 'missing or invalid bearer token' });
+
+    const body = await readJson(req);
+    if (body?.__parse_error) {
+      return json(res, 400, { ok: false, error: 'invalid json' });
+    }
+
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    const messageBody = typeof body?.body === 'string' ? body.body.trim() : '';
+    if (!title || !messageBody) {
+      return json(res, 400, { ok: false, error: 'missing title or body' });
+    }
+
+    const pushData = typeof body?.data === 'object' && body.data !== null ? body.data : {};
+
+    // Determine target: community or specific node
+    let targetCommunityId = typeof body?.community_id === 'string' ? body.community_id.trim() : null;
+    let targetNodeId = typeof body?.node_id === 'string' ? body.node_id.trim() : null;
+
+    // If community_id provided, get all member node_ids
+    if (targetCommunityId) {
+      const communitiesDb = loadCommunities();
+      const community = communitiesDb.communities?.[targetCommunityId];
+      if (!community || !community.members?.[node_id]) {
+        return json(res, 403, { ok: false, error: 'not a member of this community' });
+      }
+    } else if (!targetNodeId) {
+      return json(res, 400, { ok: false, error: 'must provide community_id or node_id' });
+    }
+
+    addToPushQueue({
+      title,
+      body: messageBody,
+      data: pushData,
+      community_id: targetCommunityId,
+      node_id: targetNodeId,
+      sent_by: node_id
+    });
+
+    return json(res, 200, { ok: true });
+  }
+
   return json(res, 404, { ok: false, error: 'not found' });
 });
 
 const PORT = Number(process.env.PORT || 8787);
 server.listen(PORT, () => {
   console.log(`[claw-relay] listening on http://127.0.0.1:${PORT}`);
+});
+
+// WebSocket Server for real-time alerts
+const wss = new WebSocketServer({ server, path: '/v1/ws/alerts' });
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url || '/', `ws://localhost:${PORT}`);
+  const token = url.searchParams.get('token');
+
+  // Authenticate via query token
+  const node_id = authenticateNode(token);
+  if (!node_id) {
+    ws.close(1008, 'invalid token');
+    return;
+  }
+
+  // Get user's communities
+  const communitiesDb = loadCommunities();
+  const myCommunities = [];
+  for (const [cid, com] of Object.entries(communitiesDb.communities || {})) {
+    if (com?.members?.[node_id]) {
+      myCommunities.push(cid);
+    }
+  }
+
+  if (myCommunities.length === 0) {
+    ws.close(1008, 'no communities found');
+    return;
+  }
+
+  // Join all community rooms
+  wsToCommunityId.set(ws, myCommunities);
+  for (const community_id of myCommunities) {
+    if (!wsCommunityRooms.has(community_id)) {
+      wsCommunityRooms.set(community_id, new Set());
+    }
+    wsCommunityRooms.get(community_id).add(ws);
+  }
+
+  console.log(`[ws] node ${node_id} connected to ${myCommunities.length} community rooms`);
+
+  // Send welcome message with subscribed communities
+  ws.send(JSON.stringify({
+    type: 'welcome',
+    community_ids: myCommunities,
+    ts: nowIso()
+  }));
+
+  // 30s keepalive ping/pong
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === 1) { // OPEN
+      ws.ping();
+    } else {
+      clearInterval(pingInterval);
+    }
+  }, 30000);
+
+  ws.on('pong', () => {
+    // Pong received, connection alive
+  });
+
+  ws.on('message', (data) => {
+    // Echo back for now
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', ts: nowIso() }));
+      }
+    } catch {
+      // Ignore invalid messages
+    }
+  });
+
+  ws.on('close', () => {
+    clearInterval(pingInterval);
+    const communities = wsToCommunityId.get(ws) || [];
+    for (const community_id of communities) {
+      const room = wsCommunityRooms.get(community_id);
+      if (room) {
+        room.delete(ws);
+        if (room.size === 0) {
+          wsCommunityRooms.delete(community_id);
+        }
+      }
+    }
+    console.log(`[ws] node ${node_id} disconnected`);
+  });
+
+  ws.on('error', (err) => {
+    console.error(`[ws] error for node ${node_id}:`, err.message);
+  });
 });

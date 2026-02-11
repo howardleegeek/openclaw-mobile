@@ -103,6 +103,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section("社区") {
+                NavigationLink {
+                    CommunityListView()
+                } label: {
+                    Label("管理社区", systemImage: "person.3.fill")
+                }
+            }
+
             Section("语言") {
                 Picker("语言", selection: languageBinding) {
                     ForEach(SettingsViewModel.Language.allCases) { lang in

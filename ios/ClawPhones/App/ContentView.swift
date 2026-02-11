@@ -14,6 +14,9 @@ struct ContentView: View {
 
     private enum Tab: Hashable {
         case chat
+        case edge
+        case community
+        case tasks
         case settings
     }
 
@@ -34,6 +37,30 @@ struct ContentView: View {
                 Label("聊天", systemImage: "message")
             }
             .tag(Tab.chat)
+
+            NavigationStack {
+                EdgeComputeView()
+            }
+            .tabItem {
+                Label("算力", systemImage: "cpu.fill")
+            }
+            .tag(Tab.edge)
+
+            NavigationStack {
+                CommunityListView()
+            }
+            .tabItem {
+                Label("社区", systemImage: "person.3.fill")
+            }
+            .tag(Tab.community)
+
+            NavigationStack {
+                TaskListView()
+            }
+            .tabItem {
+                Label("任务", systemImage: "dollarsign.circle.fill")
+            }
+            .tag(Tab.tasks)
 
             NavigationStack {
                 SettingsView()

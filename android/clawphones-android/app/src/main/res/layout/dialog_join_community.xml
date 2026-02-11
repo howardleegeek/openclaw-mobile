@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="#1A1A1A">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/community_join_code_label"
+        android:textColor="#F5F0E6"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/join_invite_code"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="#2A2A2A"
+        android:padding="12dp"
+        android:textColor="#F5F0E6"
+        android:textColorHint="#666666"
+        android:hint="@string/community_join_code_hint"
+        android:singleLine="true"
+        android:inputType="text"
+        android:textCursorDrawable="@null" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/community_join_description"
+        android:textColor="#888888"
+        android:textSize="12sp" />
+
+</LinearLayout>
