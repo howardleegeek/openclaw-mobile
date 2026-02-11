@@ -1,7 +1,7 @@
 package ai.clawphones.agent.chat;
 
-import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,6 +17,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -36,7 +37,7 @@ import java.util.concurrent.Executors;
  * Handles: conversation creation, message send/receive, 401 auto-logout,
  * Markdown rendering, and graceful lifecycle management.
  */
-public class ChatActivity extends Activity {
+public class ChatActivity extends AppCompatActivity {
 
     private RecyclerView mRecycler;
     private EditText mInput;
@@ -69,8 +70,9 @@ public class ChatActivity extends Activity {
         // Setup toolbar with title and back navigation
         Toolbar toolbar = findViewById(R.id.chat_toolbar);
         if (toolbar != null) {
+            setSupportActionBar(toolbar);
             toolbar.setTitle("ClawPhones AI");
-            toolbar.setSubtitle("智能助手");
+            toolbar.setSubtitle("\u667a\u80fd\u52a9\u624b");
             toolbar.setNavigationIcon(android.R.drawable.ic_menu_revert);
             toolbar.setNavigationOnClickListener(v -> finish());
         }
@@ -87,7 +89,7 @@ public class ChatActivity extends Activity {
 
         mExecutor = Executors.newSingleThreadExecutor();
 
-        addAssistantMessage("你好！有什么我可以帮你的吗？");
+        addAssistantMessage("\u4f60\u597d\uff01\u6709\u4ec0\u4e48\u6211\u53ef\u4ee5\u5e2e\u4f60\u7684\u5417\uff1f");
         createConversation();
 
         mSend.setOnClickListener(v -> onSend());
@@ -101,15 +103,17 @@ public class ChatActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        // CRITICAL: Set destroyed flag and shutdown executor BEFORE super.onDestroy()
+        // to prevent background threads from posting to a destroyed activity.
         mDestroyed = true;
         mMainHandler.removeCallbacksAndMessages(null);
-        super.onDestroy();
         if (mExecutor != null) {
             try {
                 mExecutor.shutdownNow();
             } catch (Exception ignored) {}
             mExecutor = null;
         }
+        super.onDestroy();
     }
 
     /** Post to UI thread safely — skips if activity is destroyed. */
@@ -120,31 +124,43 @@ public class ChatActivity extends Activity {
         });
     }
 
+    /** Execute on background thread safely — skips if executor is shut down. */
+    private void execSafe(Runnable r) {
+        ExecutorService exec = mExecutor;
+        if (exec != null && !exec.isShutdown()) {
+            try {
+                exec.execute(r);
+            } catch (java.util.concurrent.RejectedExecutionException ignored) {
+                // Executor was shut down between null-check and execute()
+            }
+        }
+    }
+
     private void createConversation() {
         if (mBusy) return;
         mBusy = true;
         setInputEnabled(false);
 
-        final int idx = addAssistantMessage("正在连接…");
+        final int idx = addAssistantMessage("\u6b63\u5728\u8fde\u63a5\u2026");
 
-        mExecutor.execute(() -> {
+        execSafe(() -> {
             try {
                 String id = ClawPhonesAPI.createConversation(mToken);
                 runSafe(() -> {
                     mConversationId = id;
-                    updateAssistantMessage(idx, "已连接，可以开始提问。");
+                    updateAssistantMessage(idx, "\u5df2\u8fde\u63a5\uff0c\u53ef\u4ee5\u5f00\u59cb\u63d0\u95ee\u3002");
                     mBusy = false;
                     setInputEnabled(true);
                 });
             } catch (IOException e) {
                 runSafe(() -> {
-                    updateAssistantMessage(idx, "网络错误: " + safeMsg(e));
+                    updateAssistantMessage(idx, "\u7f51\u7edc\u9519\u8bef: " + safeMsg(e));
                     mBusy = false;
                     setInputEnabled(true);
                 });
             } catch (JSONException e) {
                 runSafe(() -> {
-                    updateAssistantMessage(idx, "数据解析错误");
+                    updateAssistantMessage(idx, "\u6570\u636e\u89e3\u6790\u9519\u8bef");
                     mBusy = false;
                     setInputEnabled(true);
                 });
@@ -152,10 +168,10 @@ public class ChatActivity extends Activity {
                 runSafe(() -> {
                     if (e.statusCode == 401) {
                         ClawPhonesAPI.clearToken(ChatActivity.this);
-                        redirectToLogin("登录已过期，请重新登录");
+                        redirectToLogin("\u767b\u5f55\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55");
                         return;
                     }
-                    updateAssistantMessage(idx, "连接失败: " + safeErr(e));
+                    updateAssistantMessage(idx, "\u8fde\u63a5\u5931\u8d25: " + safeErr(e));
                     mBusy = false;
                     setInputEnabled(true);
                 });
@@ -170,7 +186,7 @@ public class ChatActivity extends Activity {
         if (TextUtils.isEmpty(text)) return;
 
         if (TextUtils.isEmpty(mConversationId)) {
-            toast("正在初始化对话，请稍等…");
+            toast("\u6b63\u5728\u521d\u59cb\u5316\u5bf9\u8bdd\uff0c\u8bf7\u7a0d\u7b49\u2026");
             return;
         }
 
@@ -180,9 +196,9 @@ public class ChatActivity extends Activity {
         mBusy = true;
         setInputEnabled(false);
 
-        final int idx = addAssistantMessage("思考中…");
+        final int idx = addAssistantMessage("\u601d\u8003\u4e2d\u2026");
 
-        mExecutor.execute(() -> {
+        execSafe(() -> {
             try {
                 String reply = ClawPhonesAPI.chat(mToken, mConversationId, text);
                 runSafe(() -> {
@@ -192,13 +208,13 @@ public class ChatActivity extends Activity {
                 });
             } catch (IOException e) {
                 runSafe(() -> {
-                    updateAssistantMessage(idx, "网络错误: " + safeMsg(e));
+                    updateAssistantMessage(idx, "\u7f51\u7edc\u9519\u8bef: " + safeMsg(e));
                     mBusy = false;
                     setInputEnabled(true);
                 });
             } catch (JSONException e) {
                 runSafe(() -> {
-                    updateAssistantMessage(idx, "数据解析错误");
+                    updateAssistantMessage(idx, "\u6570\u636e\u89e3\u6790\u9519\u8bef");
                     mBusy = false;
                     setInputEnabled(true);
                 });
@@ -206,10 +222,10 @@ public class ChatActivity extends Activity {
                 runSafe(() -> {
                     if (e.statusCode == 401) {
                         ClawPhonesAPI.clearToken(ChatActivity.this);
-                        redirectToLogin("登录已过期，请重新登录");
+                        redirectToLogin("\u767b\u5f55\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55");
                         return;
                     }
-                    updateAssistantMessage(idx, "请求失败: " + safeErr(e));
+                    updateAssistantMessage(idx, "\u8bf7\u6c42\u5931\u8d25: " + safeErr(e));
                     mBusy = false;
                     setInputEnabled(true);
                 });
@@ -259,8 +275,9 @@ public class ChatActivity extends Activity {
     }
 
     private void scrollToBottom() {
+        if (mRecycler == null) return;
         mRecycler.post(() -> {
-            if (mAdapter.getItemCount() > 0) {
+            if (mAdapter != null && mAdapter.getItemCount() > 0) {
                 mRecycler.smoothScrollToPosition(mAdapter.getItemCount() - 1);
             }
         });
@@ -277,8 +294,8 @@ public class ChatActivity extends Activity {
 
     private static String safeMsg(Exception e) {
         String msg = e.getMessage();
-        if (msg == null || msg.trim().isEmpty()) return "未知错误";
-        if (msg.length() > 200) msg = msg.substring(0, 200) + "…";
+        if (msg == null || msg.trim().isEmpty()) return "\u672a\u77e5\u9519\u8bef";
+        if (msg.length() > 200) msg = msg.substring(0, 200) + "\u2026";
         return msg;
     }
 
@@ -291,7 +308,7 @@ public class ChatActivity extends Activity {
             String detail = errJson.optString("detail", null);
             if (detail != null && !detail.trim().isEmpty()) return detail;
         } catch (Exception ignored) {}
-        if (msg.length() > 200) msg = msg.substring(0, 200) + "…";
+        if (msg.length() > 200) msg = msg.substring(0, 200) + "\u2026";
         return msg;
     }
 
@@ -363,6 +380,8 @@ public class ChatActivity extends Activity {
             void bind(String markdown, boolean isUser) {
                 if (text != null) {
                     text.setText(renderMarkdown(markdown));
+                    // White text on user blue bubble, cream on assistant dark bubble
+                    text.setTextColor(isUser ? Color.WHITE : 0xFFF5F0E6);
                 }
                 if (bubble != null) {
                     android.widget.FrameLayout.LayoutParams lp =
@@ -379,22 +398,30 @@ public class ChatActivity extends Activity {
             }
         }
 
+        /**
+         * Render basic Markdown to HTML. Uses bounded regex patterns to
+         * prevent catastrophic backtracking (ReDoS) on malicious input.
+         */
         private static CharSequence renderMarkdown(String markdown) {
             if (markdown == null) markdown = "";
+            // Limit input length to prevent regex DoS
+            if (markdown.length() > 50_000) {
+                markdown = markdown.substring(0, 50_000) + "\u2026";
+            }
             try {
                 String html = TextUtils.htmlEncode(markdown);
-                // Code blocks (triple backtick → <pre>)
-                html = html.replaceAll("```([\\s\\S]*?)```", "<pre>$1</pre>");
-                // Inline code
-                html = html.replaceAll("`([^`]+)`", "<tt><b>$1</b></tt>");
-                // Bold
-                html = html.replaceAll("\\*\\*([^*]+)\\*\\*", "<b>$1</b>");
-                // Italic
-                html = html.replaceAll("(?<!\\*)\\*([^*]+)\\*(?!\\*)", "<i>$1</i>");
-                // Links
-                html = html.replaceAll("\\[([^\\]]+)\\]\\((https?://[^\\)]+)\\)", "<a href=\"$2\">$1</a>");
+                // Code blocks (triple backtick -> <pre>) — bounded: max 10K chars inside
+                html = html.replaceAll("```([^`]{0,10000})```", "<pre>$1</pre>");
+                // Inline code — bounded: max 500 chars inside
+                html = html.replaceAll("`([^`]{1,500})`", "<tt><b>$1</b></tt>");
+                // Bold — bounded: max 500 chars inside
+                html = html.replaceAll("\\*\\*([^*]{1,500})\\*\\*", "<b>$1</b>");
+                // Italic — bounded: max 500 chars inside
+                html = html.replaceAll("(?<!\\*)\\*([^*]{1,500})\\*(?!\\*)", "<i>$1</i>");
+                // Links — bounded: max 200 chars each part
+                html = html.replaceAll("\\[([^\\]]{1,200})\\]\\((https?://[^\\)]{1,500})\\)", "<a href=\"$2\">$1</a>");
                 // Bullet points (- item)
-                html = html.replaceAll("(?m)^- (.+)", "• $1");
+                html = html.replaceAll("(?m)^- (.+)", "\u2022 $1");
                 // Newlines
                 html = html.replace("\n", "<br/>");
                 return Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY);

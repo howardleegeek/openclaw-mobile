@@ -10,3 +10,7 @@
 -dontobfuscate
 #-renamesourcefileattribute SourceFile
 #-keepattributes SourceFile,LineNumberTable
+
+# Keep ClawPhones AI chat classes (Activities, API, inner classes)
+-keep class ai.clawphones.agent.chat.** { *; }
+-keep class ai.clawphones.agent.** { *; }

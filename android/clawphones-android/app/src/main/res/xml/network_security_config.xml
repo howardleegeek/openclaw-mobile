@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network Security Configuration for ClawPhones.
+    Restricts cleartext (HTTP) traffic to ONLY the ClawPhones backend server.
+    All other domains require HTTPS.
+-->
+<network-security-config>
+    <!-- Default: block cleartext for all domains -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Allow cleartext ONLY for ClawPhones backend (until HTTPS is set up) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">3.142.69.6</domain>
+    </domain-config>
+</network-security-config>

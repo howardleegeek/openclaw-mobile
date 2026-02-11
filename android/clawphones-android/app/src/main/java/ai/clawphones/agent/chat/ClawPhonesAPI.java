@@ -196,14 +196,19 @@ public class ClawPhonesAPI {
         StringBuilder sb = new StringBuilder();
 
         try {
-            java.io.InputStream stream;
+            java.io.InputStream stream = null;
             if (code >= 200 && code < 300) {
                 stream = conn.getInputStream();
             } else {
                 stream = conn.getErrorStream();
                 if (stream == null) {
-                    // Some Android versions return null error stream
-                    stream = conn.getInputStream();
+                    // Some Android versions return null error stream.
+                    // Try getInputStream as a fallback (may also be null or throw).
+                    try {
+                        stream = conn.getInputStream();
+                    } catch (IOException ignored) {
+                        // Can't read error body — will use status code only
+                    }
                 }
             }
             if (stream != null) {
