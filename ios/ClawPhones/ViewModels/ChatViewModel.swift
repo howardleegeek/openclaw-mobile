@@ -5,6 +5,7 @@
 
 import Network
 import SwiftUI
+import UIKit
 
 @MainActor
 final class ChatViewModel: ObservableObject {
@@ -21,6 +22,11 @@ final class ChatViewModel: ObservableObject {
     private let pathMonitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "ai.clawphones.network-monitor")
     private var isFlushingQueue = false
+    private var hiddenHistory: [Message] = []
+    private var isLoadingOlderMessages = false
+    private var memoryWarningObserver: NSObjectProtocol?
+
+    private let messagePageSize = 80
 
     static let defaultSystemPrompt = """
     你是 ClawPhones AI 助手，由 Oyster Labs 开发。你聪明、友好、高效。
@@ -40,10 +46,14 @@ final class ChatViewModel: ObservableObject {
             }
         }
         configureNetworkMonitor()
+        observeMemoryWarnings()
     }
 
     deinit {
         pathMonitor.cancel()
+        if let memoryWarningObserver {
+            NotificationCenter.default.removeObserver(memoryWarningObserver)
+        }
     }
 
     func startNewConversation() async {
@@ -57,7 +67,12 @@ final class ChatViewModel: ObservableObject {
             )
             conversationId = conversation.id
             conversationTitle = conversation.title ?? "New Chat"
+            AnalyticsService.shared.track(
+                "conversation_created",
+                properties: ["conversation_id": conversation.id]
+            )
             messages = []
+            hiddenHistory.removeAll(keepingCapacity: false)
 
             queueStore.assignConversationIdToEmpty(conversation.id)
             restoreQueuedMessages(for: conversation.id)
@@ -79,10 +94,13 @@ final class ChatViewModel: ObservableObject {
 
     func loadConversation(id: String) async {
         errorMessage = nil
+        if conversationId != id {
+            clearConversationStateForSwitch()
+        }
 
         let cachedMessages = await cacheStore.loadMessages(conversationId: id)
         if !cachedMessages.isEmpty {
-            messages = cachedMessages
+            applyPagedMessages(cachedMessages)
             conversationId = id
         }
         let cachedConversations = await cacheStore.loadConversations()
@@ -97,7 +115,7 @@ final class ChatViewModel: ObservableObject {
             let detail = try await OpenClawAPI.shared.getConversation(id: id)
             conversationId = detail.id
             conversationTitle = detail.title ?? "Untitled"
-            messages = detail.messages
+            applyPagedMessages(detail.messages)
 
             let latestTs = detail.messages.last?.createdAt ?? detail.createdAt
             let lastMessage = detail.messages.last?.content
@@ -125,6 +143,14 @@ final class ChatViewModel: ObservableObject {
         guard !isLoading else { return }
 
         errorMessage = nil
+        AnalyticsService.shared.track(
+            "message_sent",
+            properties: [
+                "conversation_id": conversationId ?? "",
+                "message_length": trimmed.count,
+                "queued": !isOnline
+            ]
+        )
 
         if !isOnline {
             queueMessageForLater(trimmed)
@@ -204,6 +230,20 @@ final class ChatViewModel: ObservableObject {
         Task { [weak self] in
             await self?.flushPendingMessages()
         }
+    }
+
+    func loadOlderMessagesIfNeeded(anchorMessageId: String) {
+        guard !isLoadingOlderMessages else { return }
+        guard !hiddenHistory.isEmpty else { return }
+        guard messages.first?.id == anchorMessageId else { return }
+
+        isLoadingOlderMessages = true
+        defer { isLoadingOlderMessages = false }
+
+        let nextStart = max(0, hiddenHistory.count - messagePageSize)
+        let olderChunk = Array(hiddenHistory[nextStart..<hiddenHistory.count])
+        hiddenHistory.removeSubrange(nextStart..<hiddenHistory.count)
+        messages.insert(contentsOf: olderChunk, at: 0)
     }
 
     // MARK: - Queue / Network
@@ -341,6 +381,10 @@ final class ChatViewModel: ObservableObject {
                         )
                         conversationId = conversation.id
                         conversationTitle = conversation.title ?? "New Chat"
+                        AnalyticsService.shared.track(
+                            "conversation_created",
+                            properties: ["conversation_id": conversation.id]
+                        )
                         targetConversationId = conversation.id
                         let now = Int(Date().timeIntervalSince1970)
                         await cacheStore.upsertConversation(
@@ -479,7 +523,7 @@ final class ChatViewModel: ObservableObject {
 
     private func persistCacheSnapshotIfPossible() {
         guard let cid = conversationId, !cid.isEmpty else { return }
-        let snapshot = messages
+        let snapshot = currentConversationSnapshot()
         let title = conversationTitle
         Task {
             await persistCacheSnapshot(
@@ -493,7 +537,7 @@ final class ChatViewModel: ObservableObject {
     private func persistCacheSnapshot(conversationId: String) async {
         await persistCacheSnapshot(
             conversationId: conversationId,
-            snapshot: messages,
+            snapshot: currentConversationSnapshot(),
             title: conversationTitle
         )
     }
@@ -509,6 +553,47 @@ final class ChatViewModel: ObservableObject {
             lastMessage: lastMessage,
             messageCount: cacheable.count
         )
+    }
+
+    private func applyPagedMessages(_ source: [Message]) {
+        if source.count <= messagePageSize {
+            hiddenHistory.removeAll(keepingCapacity: false)
+            messages = source
+            return
+        }
+
+        let splitIndex = max(0, source.count - messagePageSize)
+        hiddenHistory = Array(source[..<splitIndex])
+        messages = Array(source[splitIndex...])
+    }
+
+    private func currentConversationSnapshot() -> [Message] {
+        hiddenHistory + messages
+    }
+
+    private func observeMemoryWarnings() {
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                MessageThumbnailCache.shared.clear()
+                self.compactHiddenHistoryForMemoryPressure()
+            }
+        }
+    }
+
+    private func compactHiddenHistoryForMemoryPressure() {
+        guard hiddenHistory.count > messagePageSize else { return }
+        hiddenHistory = Array(hiddenHistory.suffix(messagePageSize))
+    }
+
+    private func clearConversationStateForSwitch() {
+        messages.removeAll(keepingCapacity: false)
+        hiddenHistory.removeAll(keepingCapacity: false)
+        MessageThumbnailCache.shared.clear()
     }
 
     private func normalizeMessagesForCache(_ source: [Message]) -> [Message] {

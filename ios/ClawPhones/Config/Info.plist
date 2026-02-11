@@ -9,9 +9,9 @@
     <key>CFBundleDisplayName</key>
     <string>ClawPhones</string>
     <key>CFBundleVersion</key>
-    <string>$(CURRENT_PROJECT_VERSION)</string>
+    <string>1</string>
     <key>CFBundleShortVersionString</key>
-    <string>$(MARKETING_VERSION)</string>
+    <string>1.0.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
@@ -32,14 +32,40 @@
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>
-        <true/>
+        <false/>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>3.142.69.6</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+            </dict>
+            <key>localhost</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+            </dict>
+            <key>127.0.0.1</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+            </dict>
+        </dict>
     </dict>
+    <key>NSCameraUsageDescription</key>
+    <string>ClawPhones 需要访问相机以拍摄并上传图片。</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>ClawPhones 需要访问相册以选择图片进行分享和对话。</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>ClawPhones 需要使用麦克风进行语音输入。</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>ClawPhones 需要语音识别权限将语音转换为文本。</string>
-    <key>UILaunchScreen</key>
-    <dict/>
+    <key>NSFaceIDUsageDescription</key>
+    <string>ClawPhones 使用 Face ID 保护你的账号与本地敏感数据。</string>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

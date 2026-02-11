@@ -134,6 +134,10 @@ final class SettingsViewModel: ObservableObject {
         do {
             let payload = try await OpenClawAPI.shared.updateUserProfile(name: trimmed, language: nil)
             profile.name = payload.name ?? trimmed
+            AnalyticsService.shared.track(
+                "settings_changed",
+                properties: ["setting": "name"]
+            )
         } catch {
             // TODO: backend may not be ready yet; keep local update.
             profile = previous
@@ -152,6 +156,13 @@ final class SettingsViewModel: ObservableObject {
         do {
             let payload = try await OpenClawAPI.shared.updateUserProfile(name: nil, language: lang.rawValue)
             profile.language = Language(rawValue: payload.language ?? lang.rawValue) ?? lang
+            AnalyticsService.shared.track(
+                "settings_changed",
+                properties: [
+                    "setting": "language",
+                    "language": lang.rawValue
+                ]
+            )
         } catch {
             // TODO: backend may not be ready yet; keep local update.
             profile = previous
@@ -236,6 +247,13 @@ final class SettingsViewModel: ObservableObject {
                 persona: nextPersona,
                 customPrompt: payload.customPrompt ?? (customPrompt ?? ""),
                 temperature: payload.temperature ?? (temperature ?? aiConfig.temperature)
+            )
+            AnalyticsService.shared.track(
+                "settings_changed",
+                properties: [
+                    "setting": "ai_config",
+                    "persona": persona.rawValue
+                ]
             )
         } catch {
             // TODO: backend may not be ready yet; keep local update.

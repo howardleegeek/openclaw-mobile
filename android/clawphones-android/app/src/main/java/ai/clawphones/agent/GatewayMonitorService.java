@@ -81,9 +81,10 @@ public class GatewayMonitorService extends Service {
         Logger.logInfo(LOG_TAG, "Service created");
         mCurrentStatus = getString(R.string.gateway_monitor_status_starting);
 
-        // Bind to ClawPhonesService for command execution
-        Intent intent = new Intent(this, ClawPhonesService.class);
-        bindService(intent, mClawPhonesServiceConnection, Context.BIND_AUTO_CREATE);
+        // Bind to ClawPhonesService for command execution.
+        if (!ClawPhonesApp.bindClawPhonesService(this, mClawPhonesServiceConnection)) {
+            Logger.logError(LOG_TAG, "Failed to bind ClawPhonesService");
+        }
 
         // Initialize wake lock to handle Doze mode
         // Uses timeout with periodic re-acquisition to prevent orphaned locks

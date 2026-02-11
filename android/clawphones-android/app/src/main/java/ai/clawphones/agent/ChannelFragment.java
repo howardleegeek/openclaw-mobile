@@ -1,7 +1,6 @@
 package ai.clawphones.agent;
 
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.net.Uri;
@@ -89,9 +88,9 @@ public class ChannelFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        // Bind to service (matching InstallFragment lifecycle pattern)
-        Intent intent = new Intent(requireActivity(), ClawPhonesService.class);
-        requireActivity().bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+        if (!ClawPhonesApp.bindClawPhonesService(requireActivity(), mConnection)) {
+            Logger.logError(LOG_TAG, "Failed to bind ClawPhonesService");
+        }
     }
 
     @Override

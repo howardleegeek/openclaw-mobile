@@ -20,18 +20,21 @@
 		7B5A22A66466928C9A83C19F /* ClawPhonesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA521445573D71EA58448AA /* ClawPhonesApp.swift */; };
 		7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */; };
 		8485D758DFF24CE48C63F490 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8D12A6636D41058D5DB456 /* SettingsView.swift */; };
-		87D417640B4FE90663F8EE30 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575C0A74873CA4D4C6F87F30 /* MessageRow.swift */; };
-		96B5011849CE99D54BE27B2D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 06896E4FD29AE979B8155D6D /* Assets.xcassets */; };
-		A1B2C3D40100000000000001 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D50100000000000002 /* ShareViewController.swift */; };
+			87D417640B4FE90663F8EE30 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575C0A74873CA4D4C6F87F30 /* MessageRow.swift */; };
+			96B5011849CE99D54BE27B2D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 06896E4FD29AE979B8155D6D /* Assets.xcassets */; };
+			9FBA20A8CB73F2866E2F8A01 /* BiometricAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FBA20A8CB73F2866E2F8A02 /* BiometricAuthService.swift */; };
+			A1B2C3D40100000000000001 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D50100000000000002 /* ShareViewController.swift */; };
 		A1B2C3D40100000000000003 /* ClawPhonesShare.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A2B3C4D50100000000000001 /* ClawPhonesShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A1B2C3D40100000000000004 /* SharePayloadBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D50100000000000006 /* SharePayloadBridge.swift */; };
 		A1B2C3D40100000000000005 /* MessageQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D50100000000000007 /* MessageQueue.swift */; };
 		A1B2C3D40100000000000006 /* ConversationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D50100000000000008 /* ConversationCache.swift */; };
 		A1D8B6377C8E4A5EA2F96B31 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B2C7939D4E41A1986A23C5 /* SpeechRecognizer.swift */; };
 		A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */; };
+		C8A11F59D2E84B0DA7F39002 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A11F59D2E84B0DA7F39001 /* AnalyticsService.swift */; };
 		B6E77F6C59C34F4A9E80B341 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D64C35235EE4A72B4BCAC3D /* OnboardingView.swift */; };
 		B909E20879439BD44BC7D68E /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9BE935A3A036729805815B /* Message.swift */; };
 		BF0C057F4C1EB0639041006A /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 529105A52C7F000A0054A75F /* ChatInputBar.swift */; };
+		C1D2E3F40102030405060708 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060709 /* LaunchScreen.storyboard */; };
 		C39C68C22C5D4627BE6656AB /* AIConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F59290DE3BD6463EA50E0D45 /* AIConfigView.swift */; };
 		D38A010CAD8646EA86AEEF5E /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0481E7B723374FBCA7BAB658 /* AuthViewModel.swift */; };
 		D5A2F823B2D34E6C9EAB1C2D /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */; };
@@ -73,17 +76,20 @@
 		30145ADC199352484415BA60 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3AC5AE07859E9065699CB5FE /* ConversationListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListView.swift; sourceTree = "<group>"; };
 		4F8A40DE8CD9B14BD1C5C292 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C1D2E3F40102030405060709 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		529105A52C7F000A0054A75F /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
 		575C0A74873CA4D4C6F87F30 /* MessageRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRow.swift; sourceTree = "<group>"; };
 		5B9BE935A3A036729805815B /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		5D64C35235EE4A72B4BCAC3D /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenClawAPI.swift; sourceTree = "<group>"; };
+		C8A11F59D2E84B0DA7F39001 /* AnalyticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsService.swift; sourceTree = "<group>"; };
 		7671A61CD7494469A0232FFC /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		7BEB09C2D39E49319063F40F /* StreamChunk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamChunk.swift; sourceTree = "<group>"; };
-		862F703D18564A0E9CE80F46 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
-		8BF3986839DCF6C9FD74576D /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
-		97D8E07F8EC6E306984E5477 /* ClawPhones.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawPhones.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A2B3C4D50100000000000001 /* ClawPhonesShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClawPhonesShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+			862F703D18564A0E9CE80F46 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
+			8BF3986839DCF6C9FD74576D /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+			97D8E07F8EC6E306984E5477 /* ClawPhones.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawPhones.app; sourceTree = BUILT_PRODUCTS_DIR; };
+			9FBA20A8CB73F2866E2F8A02 /* BiometricAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricAuthService.swift; sourceTree = "<group>"; };
+			A2B3C4D50100000000000001 /* ClawPhonesShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClawPhonesShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2B3C4D50100000000000002 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		A2B3C4D50100000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A2B3C4D50100000000000004 /* ClawPhonesShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClawPhonesShare.entitlements; sourceTree = "<group>"; };
@@ -162,6 +168,7 @@
 			isa = PBXGroup;
 			children = (
 				4F8A40DE8CD9B14BD1C5C292 /* Info.plist */,
+				C1D2E3F40102030405060709 /* LaunchScreen.storyboard */,
 				30145ADC199352484415BA60 /* PrivacyInfo.xcprivacy */,
 				A2B3C4D50100000000000005 /* ClawPhones.entitlements */,
 			);
@@ -177,12 +184,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		A42DDB42031A67342B35AD3C /* Services */ = {
-			isa = PBXGroup;
-			children = (
-				E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */,
-				F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */,
-				5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */,
+			A42DDB42031A67342B35AD3C /* Services */ = {
+				isa = PBXGroup;
+				children = (
+					E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */,
+					9FBA20A8CB73F2866E2F8A02 /* BiometricAuthService.swift */,
+					F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */,
+					5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */,
+					C8A11F59D2E84B0DA7F39001 /* AnalyticsService.swift */,
 				F4B2C7939D4E41A1986A23C5 /* SpeechRecognizer.swift */,
 				C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */,
 				A2B3C4D50100000000000006 /* SharePayloadBridge.swift */,
@@ -315,6 +324,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				96B5011849CE99D54BE27B2D /* Assets.xcassets in Resources */,
+				C1D2E3F40102030405060708 /* LaunchScreen.storyboard in Resources */,
 				449C4D244B7A1C00D4AD632E /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -351,11 +361,13 @@
 				E95210B60420431CA5A0F782 /* PlanView.swift in Sources */,
 				C39C68C22C5D4627BE6656AB /* AIConfigView.swift in Sources */,
 				B909E20879439BD44BC7D68E /* Message.swift in Sources */,
-				4BBB5AC4A4384E83B3CB3E99 /* StreamChunk.swift in Sources */,
-				53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */,
-				7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */,
-				A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */,
-				A1D8B6377C8E4A5EA2F96B31 /* SpeechRecognizer.swift in Sources */,
+					4BBB5AC4A4384E83B3CB3E99 /* StreamChunk.swift in Sources */,
+					53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */,
+					7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */,
+					9FBA20A8CB73F2866E2F8A01 /* BiometricAuthService.swift in Sources */,
+					A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */,
+					C8A11F59D2E84B0DA7F39002 /* AnalyticsService.swift in Sources */,
+					A1D8B6377C8E4A5EA2F96B31 /* SpeechRecognizer.swift in Sources */,
 				D5A2F823B2D34E6C9EAB1C2D /* CrashReporter.swift in Sources */,
 				A1B2C3D40100000000000004 /* SharePayloadBridge.swift in Sources */,
 				A1B2C3D40100000000000005 /* MessageQueue.swift in Sources */,
@@ -410,7 +422,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.clawphones.app.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -435,7 +447,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.clawphones.app.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -461,7 +473,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.clawphones.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
@@ -500,7 +512,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.clawphones.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

@@ -2,10 +2,8 @@ package ai.clawphones.agent;
 
 import android.app.Activity;
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.view.View;
@@ -89,8 +87,9 @@ public class PreinstallActivity extends Activity {
     @Override
     protected void onStart() {
         super.onStart();
-        Intent intent = new Intent(this, ClawPhonesService.class);
-        bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+        if (!ClawPhonesApp.bindClawPhonesService(this, mConnection)) {
+            Logger.logError(LOG_TAG, "Failed to bind ClawPhonesService");
+        }
     }
 
     @Override
@@ -176,12 +175,7 @@ public class PreinstallActivity extends Activity {
 
     private void startGatewayMonitorService() {
         try {
-            Intent serviceIntent = new Intent(this, GatewayMonitorService.class);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent);
-            } else {
-                startService(serviceIntent);
-            }
+            ClawPhonesApp.startGatewayMonitorService(this);
         } catch (Exception e) {
             Logger.logWarn(LOG_TAG, "Failed to start monitor service: " + e.getMessage());
         }

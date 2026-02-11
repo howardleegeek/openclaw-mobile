@@ -203,6 +203,13 @@ struct ConversationListView: View {
 
         do {
             let conversation = try await OpenClawAPI.shared.createConversation(systemPrompt: ChatViewModel.defaultSystemPrompt)
+            AnalyticsService.shared.track(
+                "conversation_created",
+                properties: [
+                    "conversation_id": conversation.id,
+                    "source": "shared_payload"
+                ]
+            )
 
             do {
                 _ = try await OpenClawAPI.shared.chat(conversationId: conversation.id, message: payload.content)

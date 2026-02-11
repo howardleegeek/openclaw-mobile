@@ -452,6 +452,19 @@ async def _init_db() -> None:
         )
         await db.execute("CREATE INDEX IF NOT EXISTS idx_conversations_token_updated ON conversations(device_token, updated_at)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at)")
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS analytics_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              event_name TEXT NOT NULL,
+              properties TEXT NOT NULL DEFAULT '{}',
+              user_id TEXT,
+              timestamp INTEGER NOT NULL
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_analytics_events_ts ON analytics_events(timestamp)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_analytics_events_event_ts ON analytics_events(event_name, timestamp)")
 
         await db.execute(
             """
@@ -882,6 +895,26 @@ def _parse_bearer(auth_header: Optional[str]) -> Optional[str]:
     return token or None
 
 
+def _coerce_event_timestamp(value: Any, fallback: int) -> int:
+    ts = int(fallback)
+    if isinstance(value, (int, float)):
+        ts = int(value)
+    elif isinstance(value, str):
+        v = value.strip()
+        if v:
+            try:
+                ts = int(float(v))
+            except Exception:
+                pass
+
+    # Accept milliseconds from clients and normalize to epoch seconds.
+    if ts > 10_000_000_000:
+        ts = ts // 1000
+    if ts <= 0:
+        ts = int(fallback)
+    return ts
+
+
 def _require_upstream_key(provider: str) -> None:
     if provider == "deepseek" and not DEEPSEEK_API_KEY:
         raise HTTPException(status_code=500, detail="missing DEEPSEEK_API_KEY")
@@ -1226,6 +1259,82 @@ async def _startup() -> None:
 @app.get("/health")
 async def health() -> Dict[str, Any]:
     return {"ok": True, "ts": int(time.time())}
+
+
+@app.post("/v1/analytics/events")
+async def post_analytics_events(request: Request) -> Any:
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="request body must be valid JSON")
+
+    events: List[Any] = []
+    if isinstance(body, list):
+        events = body
+    elif isinstance(body, dict):
+        if isinstance(body.get("events"), list):
+            events = body.get("events") or []
+        elif ("event" in body) or ("event_name" in body):
+            events = [body]
+        else:
+            raise HTTPException(status_code=400, detail="body must be an event array or object with events")
+    else:
+        raise HTTPException(status_code=400, detail="body must be an event array or object with events")
+
+    if not events:
+        return {"ok": True, "stored": 0, "dropped": 0}
+
+    token = _parse_bearer(request.headers.get("authorization"))
+    resolved_user_id: Optional[str] = None
+    if token:
+        user = await _get_user_row_for_token_optional(token)
+        if user and user.get("id"):
+            resolved_user_id = str(user["id"])
+
+    now = int(time.time())
+    rows: List[Tuple[str, str, Optional[str], int]] = []
+    dropped = 0
+    for raw in events:
+        if not isinstance(raw, dict):
+            dropped += 1
+            continue
+
+        event_name = raw.get("event")
+        if not isinstance(event_name, str) or not event_name.strip():
+            event_name = raw.get("event_name")
+        if not isinstance(event_name, str) or not event_name.strip():
+            dropped += 1
+            continue
+        event_name = event_name.strip()[:128]
+
+        properties = raw.get("properties")
+        if not isinstance(properties, dict):
+            properties = {}
+        try:
+            properties_json = json.dumps(properties, ensure_ascii=False)
+        except Exception:
+            properties_json = "{}"
+
+        user_id = resolved_user_id
+        if not user_id:
+            raw_user_id = raw.get("user_id")
+            if isinstance(raw_user_id, str) and raw_user_id.strip():
+                user_id = raw_user_id.strip()
+
+        ts = _coerce_event_timestamp(raw.get("timestamp"), fallback=now)
+        rows.append((event_name, properties_json, user_id, ts))
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="no valid analytics events")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        await db.executemany(
+            "INSERT INTO analytics_events(event_name,properties,user_id,timestamp) VALUES (?,?,?,?)",
+            rows,
+        )
+        await db.commit()
+
+    return {"ok": True, "stored": len(rows), "dropped": dropped}
 
 
 @app.post("/v1/auth/register")

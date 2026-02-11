@@ -9,6 +9,7 @@ import UIKit
 struct SettingsView: View {
     @EnvironmentObject private var auth: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
+    @AppStorage(BiometricAuthService.lockEnabledStorageKey) private var biometricLockEnabled: Bool = false
 
     @State private var showEditName: Bool = false
     @State private var draftName: String = ""
@@ -22,6 +23,7 @@ struct SettingsView: View {
     @State private var exportShareItem: ExportShareItem?
     @State private var showDeleteAccountPrompt: Bool = false
     @State private var deleteAccountConfirmText: String = ""
+    @State private var biometryInfo = BiometricAuthService.shared.currentBiometryInfo()
 
     var body: some View {
         Form {
@@ -95,6 +97,16 @@ struct SettingsView: View {
                 }
             }
 
+            if biometryInfo.isAvailable {
+                Section("安全") {
+                    Toggle("\(biometryInfo.displayName) 锁定", isOn: $biometricLockEnabled)
+
+                    Text("开启后，应用启动和从后台返回时会要求验证身份。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("账号") {
                 Button("修改密码") {
                     oldPassword = ""
@@ -164,6 +176,9 @@ struct SettingsView: View {
             await viewModel.loadProfile()
             await viewModel.loadPlan()
             await viewModel.loadAIConfig()
+        }
+        .onAppear {
+            refreshBiometryInfo()
         }
         .overlay {
             if viewModel.isLoading {
@@ -290,6 +305,15 @@ struct SettingsView: View {
         case .writing: return "写作助手"
         case .translation: return "翻译官"
         case .custom: return "自定义"
+        }
+    }
+
+    private func refreshBiometryInfo() {
+        let info = BiometricAuthService.shared.currentBiometryInfo()
+        biometryInfo = info
+
+        if !info.isAvailable {
+            biometricLockEnabled = false
         }
     }
 }

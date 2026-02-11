@@ -17,6 +17,16 @@
         android:paddingBottom="10dp"
         android:background="@drawable/chat_bubble_assistant">
 
+        <ImageView
+            android:id="@+id/message_image"
+            android:layout_width="220dp"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:adjustViewBounds="true"
+            android:maxHeight="220dp"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/message_text"
             android:layout_width="wrap_content"

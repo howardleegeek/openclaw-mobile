@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UIKit
+import ImageIO
 
 struct MessageRow: View {
     let message: Message
@@ -128,15 +129,19 @@ struct MessageRow: View {
 
     @ViewBuilder
     private var contentView: some View {
+        let visual = parseVisualPayload(from: message.content)
         if isUser {
             if let payload = parseFileCardPayload(from: message.content) {
                 userFileCardView(payload)
             } else {
-                Text(message.content)
-                    .foregroundStyle(message.deliveryState == .sending ? Color(white: 0.78) : Color.white)
+                messageTextWithOptionalImage(
+                    text: visual.text,
+                    imageURL: visual.imageURL,
+                    foregroundColor: message.deliveryState == .sending ? Color(white: 0.78) : Color.white
+                )
             }
         } else {
-            assistantContentView
+            assistantContentView(text: visual.text, imageURL: visual.imageURL)
         }
     }
 
@@ -166,8 +171,8 @@ struct MessageRow: View {
     }
 
     @ViewBuilder
-    private var assistantContentView: some View {
-        if message.content.isEmpty {
+    private func assistantContentView(text: String, imageURL: String?) -> some View {
+        if text.isEmpty, imageURL == nil {
             VStack(alignment: .leading, spacing: 4) {
                 ThinkingIndicator()
                 Text("正在思考...")
@@ -176,14 +181,30 @@ struct MessageRow: View {
             }
             .padding(.vertical, 2)
         } else {
-            let segments = parseContentSegments(from: message.content)
+            let segments = text.isEmpty ? [] : parseContentSegments(from: text)
 
             VStack(alignment: .leading, spacing: 8) {
+                if let imageURL {
+                    CachedThumbnailView(urlString: imageURL, maxWidth: 220)
+                }
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                     segmentView(segment)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func messageTextWithOptionalImage(text: String, imageURL: String?, foregroundColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let imageURL {
+                CachedThumbnailView(urlString: imageURL, maxWidth: 220)
+            }
+            if !text.isEmpty {
+                Text(text)
+                    .foregroundStyle(foregroundColor)
+            }
         }
     }
 
@@ -386,6 +407,131 @@ struct MessageRow: View {
         return output
     }
 
+    private struct VisualPayload {
+        let text: String
+        let imageURL: String?
+    }
+
+    private func parseVisualPayload(from raw: String) -> VisualPayload {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return VisualPayload(text: "", imageURL: nil)
+        }
+
+        var extractedText = trimmed
+        var imageURL: String?
+
+        if let data = trimmed.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data, options: []) {
+            let parsed = extractVisualPayload(from: object)
+            if !parsed.text.isEmpty {
+                extractedText = parsed.text
+            }
+            if let parsedImage = parsed.imageURL {
+                imageURL = parsedImage
+            }
+        }
+
+        if imageURL == nil {
+            imageURL = firstMarkdownImageURL(in: extractedText)
+        }
+        if let imageURL {
+            extractedText = stripMarkdownImages(from: extractedText).trimmingCharacters(in: .whitespacesAndNewlines)
+            if extractedText.isEmpty, trimmed.hasPrefix("{"), trimmed.hasSuffix("}") {
+                extractedText = ""
+            }
+            return VisualPayload(text: extractedText, imageURL: imageURL)
+        }
+
+        return VisualPayload(text: extractedText, imageURL: nil)
+    }
+
+    private func extractVisualPayload(from object: Any) -> VisualPayload {
+        switch object {
+        case let dict as [String: Any]:
+            var textParts: [String] = []
+            var imageURL: String?
+
+            for key in ["text", "content", "message", "caption"] {
+                if let value = dict[key] as? String {
+                    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !normalized.isEmpty, !normalized.lowercased().hasPrefix("http") {
+                        textParts.append(normalized)
+                    }
+                }
+            }
+
+            for key in ["image_url", "imageUrl", "url"] {
+                if let value = dict[key] as? String {
+                    let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if candidate.lowercased().hasPrefix("http") {
+                        imageURL = imageURL ?? candidate
+                    }
+                }
+            }
+
+            for key in ["content", "parts", "image"] {
+                if let nested = dict[key] {
+                    let nestedPayload = extractVisualPayload(from: nested)
+                    if !nestedPayload.text.isEmpty {
+                        textParts.append(nestedPayload.text)
+                    }
+                    if let nestedImage = nestedPayload.imageURL {
+                        imageURL = imageURL ?? nestedImage
+                    }
+                }
+            }
+
+            let mergedText = textParts
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            return VisualPayload(text: mergedText, imageURL: imageURL)
+
+        case let array as [Any]:
+            var textParts: [String] = []
+            var imageURL: String?
+            for item in array {
+                let payload = extractVisualPayload(from: item)
+                if !payload.text.isEmpty {
+                    textParts.append(payload.text)
+                }
+                if let nestedImage = payload.imageURL {
+                    imageURL = imageURL ?? nestedImage
+                }
+            }
+            return VisualPayload(text: textParts.joined(separator: "\n"), imageURL: imageURL)
+
+        case let value as String:
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if normalized.lowercased().hasPrefix("http") {
+                return VisualPayload(text: "", imageURL: normalized)
+            }
+            return VisualPayload(text: normalized, imageURL: nil)
+
+        default:
+            return VisualPayload(text: "", imageURL: nil)
+        }
+    }
+
+    private func firstMarkdownImageURL(in text: String) -> String? {
+        let pattern = "!\\[[^\\]]*\\]\\((https?://[^\\s)]+)\\)"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: nsRange),
+              let range = Range(match.range(at: 1), in: text) else {
+            return nil
+        }
+        return String(text[range])
+    }
+
+    private func stripMarkdownImages(from text: String) -> String {
+        let pattern = "!\\[[^\\]]*\\]\\((https?://[^\\s)]+)\\)"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.stringByReplacingMatches(in: text, options: [], range: nsRange, withTemplate: "")
+    }
+
     private func parseFileCardPayload(from raw: String) -> FileCardPayload? {
         guard let cardStart = raw.range(of: Self.fileCardOpen),
               let cardEnd = raw.range(of: Self.fileCardClose),
@@ -476,5 +622,135 @@ struct MessageRow: View {
         default:
             return Self.swiftKeywords.union(Self.pythonKeywords).union(Self.javascriptKeywords)
         }
+    }
+}
+
+private struct CachedThumbnailView: View {
+    let urlString: String
+    let maxWidth: CGFloat
+
+    @State private var image: UIImage?
+    @State private var isLoading = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.black.opacity(0.06))
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if isLoading {
+                ProgressView()
+                    .progressViewStyle(.circular)
+            } else {
+                Image(systemName: "photo")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: maxWidth, height: maxWidth * 0.72)
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .task(id: urlString) {
+            await loadImage()
+        }
+    }
+
+    @MainActor
+    private func loadImage() async {
+        guard let url = URL(string: urlString) else { return }
+        isLoading = true
+        defer { isLoading = false }
+        image = await MessageThumbnailCache.shared.image(for: url, maxPixelSize: 512)
+    }
+}
+
+final class MessageThumbnailCache {
+    static let shared = MessageThumbnailCache()
+
+    private let cache = NSCache<NSString, UIImage>()
+
+    private init() {
+        cache.countLimit = 240
+        cache.totalCostLimit = 40 * 1024 * 1024
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(onMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    func clear() {
+        cache.removeAllObjects()
+    }
+
+    @objc
+    private func onMemoryWarning() {
+        clear()
+    }
+
+    func image(for url: URL, maxPixelSize: CGFloat) async -> UIImage? {
+        let key = cacheKey(url: url, maxPixelSize: maxPixelSize) as NSString
+        if let cached = cache.object(forKey: key) {
+            return cached
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                return nil
+            }
+
+            guard let image = downsample(data: data, maxPixelSize: maxPixelSize) else {
+                return nil
+            }
+
+            cache.setObject(image, forKey: key, cost: imageCost(image))
+            return image
+        } catch {
+            return nil
+        }
+    }
+
+    private func cacheKey(url: URL, maxPixelSize: CGFloat) -> String {
+        "\(url.absoluteString)#\(Int(max(1, maxPixelSize)))"
+    }
+
+    private func imageCost(_ image: UIImage) -> Int {
+        let width = Int(image.size.width * image.scale)
+        let height = Int(image.size.height * image.scale)
+        return max(1, width * height * 4)
+    }
+
+    private func downsample(data: Data, maxPixelSize: CGFloat) -> UIImage? {
+        let sourceOptions: [CFString: Any] = [
+            kCGImageSourceShouldCache: false
+        ]
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions as CFDictionary) else {
+            return nil
+        }
+
+        let downsampleOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(max(1, maxPixelSize))
+        ]
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
+            source,
+            0,
+            downsampleOptions as CFDictionary
+        ) else {
+            return nil
+        }
+
+        return UIImage(cgImage: cgImage)
     }
 }

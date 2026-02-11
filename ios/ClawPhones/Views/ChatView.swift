@@ -10,6 +10,7 @@ struct ChatView: View {
     @State private var inputText: String = ""
     @State private var showCopiedToast: Bool = false
     @State private var copiedToastTask: Task<Void, Never>?
+    @State private var lastObservedLastMessageId: String?
 
     private static let clockFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -32,22 +33,30 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
-                            MessageRow(
-                                message: message,
-                                timestampText: timestampText(for: index),
-                                onRetry: message.role == .user && message.deliveryState == .failed ? {
-                                    viewModel.retryQueuedMessage(messageId: message.id)
-                                } : nil,
-                                onCopy: handleCopiedMessage,
-                                onRegenerate: message.role == .assistant ? {
-                                    Task { await viewModel.regenerateAssistantMessage(messageId: message.id) }
-                                } : nil,
-                                onDelete: {
-                                    viewModel.deleteMessage(messageId: message.id)
-                                }
-                            )
-                                .id(message.id)
+                        ForEach(viewModel.messages.indices, id: \.self) { index in
+                            if viewModel.messages.indices.contains(index) {
+                                let message = viewModel.messages[index]
+                                MessageRow(
+                                    message: message,
+                                    timestampText: timestampText(for: index),
+                                    onRetry: message.role == .user && message.deliveryState == .failed ? {
+                                        viewModel.retryQueuedMessage(messageId: message.id)
+                                    } : nil,
+                                    onCopy: handleCopiedMessage,
+                                    onRegenerate: message.role == .assistant ? {
+                                        Task { await viewModel.regenerateAssistantMessage(messageId: message.id) }
+                                    } : nil,
+                                    onDelete: {
+                                        viewModel.deleteMessage(messageId: message.id)
+                                    }
+                                )
+                                    .id(message.id)
+                                    .onAppear {
+                                        if index <= 2 {
+                                            viewModel.loadOlderMessagesIfNeeded(anchorMessageId: message.id)
+                                        }
+                                    }
+                            }
                         }
                     }
                     .padding(.horizontal)
@@ -55,12 +64,17 @@ struct ChatView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: viewModel.messages.count) { _ in
-                    scrollToBottom(proxy, animated: true)
+                    let currentLastId = viewModel.messages.last?.id
+                    if currentLastId != nil && currentLastId != lastObservedLastMessageId {
+                        scrollToBottom(proxy, animated: true)
+                    }
+                    lastObservedLastMessageId = currentLastId
                 }
                 .onChange(of: viewModel.messages.last?.content ?? "") { _ in
                     scrollToBottom(proxy, animated: false)
                 }
                 .onAppear {
+                    lastObservedLastMessageId = viewModel.messages.last?.id
                     scrollToBottom(proxy, animated: false)
                 }
             }

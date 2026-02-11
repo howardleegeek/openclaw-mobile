@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Build;
@@ -127,9 +126,10 @@ public class DashboardActivity extends Activity {
         // Load SSH info
         loadSshInfo();
 
-        // Bind to service
-        Intent intent = new Intent(this, ClawPhonesService.class);
-        bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+        // Bind to service lazily after app-level deferred init has been queued.
+        if (!ClawPhonesApp.bindClawPhonesService(this, mConnection)) {
+            Logger.logError(LOG_TAG, "Failed to bind ClawPhonesService");
+        }
 
         // Check for app updates (also picks up results from launcher check)
         UpdateChecker.check(this, (latestVersion, downloadUrl, notes) -> showUpdateBanner(latestVersion, downloadUrl));
@@ -188,12 +188,7 @@ public class DashboardActivity extends Activity {
      * Start the gateway monitor service
      */
     private void startGatewayMonitorService() {
-        Intent serviceIntent = new Intent(this, GatewayMonitorService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent);
-        } else {
-            startService(serviceIntent);
-        }
+        ClawPhonesApp.startGatewayMonitorService(this);
     }
 
     /**

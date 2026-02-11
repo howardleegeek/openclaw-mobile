@@ -30,11 +30,14 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import ai.clawphones.agent.CrashReporter;
+import ai.clawphones.agent.analytics.AnalyticsManager;
 
 public class ChatSettingsActivity extends AppCompatActivity {
 
@@ -230,6 +233,10 @@ public class ChatSettingsActivity extends AppCompatActivity {
             try {
                 ClawPhonesAPI.AIConfig saved = ClawPhonesAPI.updateAIConfig(ChatSettingsActivity.this, persona, prompt, null);
                 runSafe(() -> {
+                    Map<String, Object> analyticsProps = new HashMap<>();
+                    analyticsProps.put("setting", "ai_config");
+                    analyticsProps.put("persona", saved.persona);
+                    AnalyticsManager.getInstance(getApplicationContext()).track("settings_changed", analyticsProps);
                     bindAIConfig(saved);
                     toast(getString(R.string.settings_saved_ai));
                     setBusy(false);
@@ -267,6 +274,10 @@ public class ChatSettingsActivity extends AppCompatActivity {
                 ClawPhonesAPI.UserProfile profile =
                     ClawPhonesAPI.updateUserProfile(ChatSettingsActivity.this, null, language);
                 runSafe(() -> {
+                    Map<String, Object> analyticsProps = new HashMap<>();
+                    analyticsProps.put("setting", "language");
+                    analyticsProps.put("language", profile.language);
+                    AnalyticsManager.getInstance(getApplicationContext()).track("settings_changed", analyticsProps);
                     bindProfile(profile);
                     toast(getString(R.string.settings_saved_language));
                     setBusy(false);

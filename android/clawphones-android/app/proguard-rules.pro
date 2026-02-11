@@ -14,3 +14,11 @@
 # Keep ClawPhones AI chat classes (Activities, API, inner classes)
 -keep class ai.clawphones.agent.chat.** { *; }
 -keep class ai.clawphones.agent.** { *; }
+
+# Keep Android entry points referenced by manifest/OS.
+-keep class * extends android.app.Activity { *; }
+-keep class * extends android.app.Service { *; }
+-keep class * extends android.content.BroadcastReceiver { *; }
+
+# Preserve annotations and signatures for reflection-heavy libs.
+-keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*

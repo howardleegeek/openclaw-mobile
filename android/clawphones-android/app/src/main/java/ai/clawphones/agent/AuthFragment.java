@@ -1,8 +1,6 @@
 package ai.clawphones.agent;
 
 import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -119,9 +117,9 @@ public class AuthFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        // Bind to ClawPhonesService
-        Intent intent = new Intent(getActivity(), ClawPhonesService.class);
-        requireActivity().bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+        if (!ClawPhonesApp.bindClawPhonesService(requireActivity(), mConnection)) {
+            Logger.logError(LOG_TAG, "Failed to bind ClawPhonesService");
+        }
     }
 
     @Override

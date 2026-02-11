@@ -1,6 +1,7 @@
 package com.termux.app;
 
 import android.app.Application;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 
 import com.termux.BuildConfig;
@@ -18,6 +19,11 @@ import com.termux.shared.termux.shell.am.TermuxAmSocketServer;
 import com.termux.shared.termux.shell.TermuxShellManager;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import ai.clawphones.agent.analytics.AnalyticsManager;
+
 public class TermuxApplication extends Application {
 
     private static final String LOG_TAG = "TermuxApplication";
@@ -26,6 +32,10 @@ public class TermuxApplication extends Application {
         super.onCreate();
 
         Context context = getApplicationContext();
+        AnalyticsManager analyticsManager = AnalyticsManager.getInstance(context);
+        Map<String, Object> appOpenProperties = new HashMap<>();
+        appOpenProperties.put("platform", "android");
+        analyticsManager.track("app_open", appOpenProperties);
 
         // Set crash handler for the app
         TermuxCrashUtils.setDefaultCrashHandler(this);
@@ -73,6 +83,20 @@ public class TermuxApplication extends Application {
         if (isTermuxFilesDirectoryAccessible) {
             TermuxShellEnvironment.writeEnvironmentToFile(this);
         }
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            AnalyticsManager.getInstance(getApplicationContext()).onAppBackground();
+        }
+    }
+
+    @Override
+    public void onTerminate() {
+        AnalyticsManager.getInstance(getApplicationContext()).flushNow();
+        super.onTerminate();
     }
 
     public static void setLogConfig(Context context) {

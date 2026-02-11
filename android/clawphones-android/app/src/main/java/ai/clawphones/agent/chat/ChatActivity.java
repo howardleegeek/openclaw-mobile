@@ -5,9 +5,12 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.BroadcastReceiver;
+import android.content.ComponentCallbacks2;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.ConnectivityManager;
@@ -17,8 +20,13 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Html;
+import android.text.Spannable;
+import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
+import android.text.style.BackgroundColorSpan;
+import android.text.style.QuoteSpan;
+import android.util.LruCache;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
@@ -26,6 +34,7 @@ import android.view.ViewGroup;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -42,20 +51,30 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
 
+import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import ai.clawphones.agent.CrashReporter;
+import ai.clawphones.agent.analytics.AnalyticsManager;
 
 /**
  * In-app AI chat UI backed by ClawPhones API.
@@ -89,6 +108,12 @@ public class ChatActivity extends AppCompatActivity {
     private static final long SPEECH_DONE_RESET_MS = 1_200L;
     private static final int MAX_QUEUE_RETRY = 3;
     private static final int REQUEST_RECORD_AUDIO = 7021;
+    private static final int MESSAGE_PAGE_SIZE = 80;
+    private static final int PAGINATION_PREFETCH_TRIGGER = 6;
+
+    private final ArrayList<ChatMessage> mAllHistoryMessages = new ArrayList<>();
+    private int mNextHistoryLoadStart = 0;
+    private boolean mLoadingOlderHistory = false;
 
     private enum SpeechUiState {
         IDLE,
@@ -149,7 +174,16 @@ public class ChatActivity extends AppCompatActivity {
         LinearLayoutManager lm = new LinearLayoutManager(this);
         lm.setStackFromEnd(true);
         mRecycler.setLayoutManager(lm);
+        mRecycler.setItemAnimator(null);
+        mRecycler.setItemViewCacheSize(16);
         mRecycler.setAdapter(mAdapter);
+        mRecycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (dy >= 0) return;
+                maybeLoadOlderHistory();
+            }
+        });
 
         mMessageQueue = new MessageQueue(this);
         mExecutor = Executors.newSingleThreadExecutor();
@@ -180,6 +214,9 @@ public class ChatActivity extends AppCompatActivity {
         unregisterConnectivityReceiver();
         clearPendingSpeechIdleReset();
         stopMicPulseAnimation();
+        if (mAdapter != null) {
+            mAdapter.clearMemoryCaches();
+        }
         if (mSpeechHelper != null) {
             mSpeechHelper.release();
             mSpeechHelper = null;
@@ -200,6 +237,32 @@ public class ChatActivity extends AppCompatActivity {
             mCache = null;
         }
         super.onDestroy();
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (mAdapter != null) {
+            mAdapter.onTrimMemory(level);
+        }
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND && mRecycler != null) {
+            mRecycler.getRecycledViewPool().clear();
+        }
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && mAdapter != null) {
+            mAdapter.clearMemoryCaches();
+        }
+
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && mAllHistoryMessages.size() > MESSAGE_PAGE_SIZE * 2) {
+            int pruneCount = mAllHistoryMessages.size() - (MESSAGE_PAGE_SIZE * 2);
+            if (pruneCount > 0) {
+                mAllHistoryMessages.subList(0, pruneCount).clear();
+                mNextHistoryLoadStart = Math.max(0, mNextHistoryLoadStart - pruneCount);
+            }
+        }
+
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            clearPendingUpdate();
+        }
     }
 
     @Override
@@ -322,8 +385,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void applyHistoryRows(@NonNull List<Map<String, Object>> rows, @Nullable String conversationId) {
-        mMessages.clear();
-        mQueuedMessageIndexes.clear();
+        mAllHistoryMessages.clear();
         for (Map<String, Object> row : rows) {
             String role = asString(row.get("role"));
             String content = asString(row.get("content"));
@@ -332,11 +394,68 @@ public class ChatActivity extends AppCompatActivity {
             ChatMessage.Role messageRole = "user".equalsIgnoreCase(role)
                 ? ChatMessage.Role.USER
                 : ChatMessage.Role.ASSISTANT;
-            mMessages.add(new ChatMessage(messageRole, parsed.text, false, parsed.imageUrl));
+            mAllHistoryMessages.add(new ChatMessage(messageRole, parsed.text, false, parsed.imageUrl));
         }
+
+        mMessages.clear();
+        mQueuedMessageIndexes.clear();
+        int total = mAllHistoryMessages.size();
+        int start = Math.max(0, total - MESSAGE_PAGE_SIZE);
+        if (start < total) {
+            mMessages.addAll(mAllHistoryMessages.subList(start, total));
+        }
+        mNextHistoryLoadStart = start;
+        mLoadingOlderHistory = false;
+
         restoreQueuedMessagesForConversation(conversationId);
         mAdapter.notifyDataSetChanged();
         scrollToBottom();
+    }
+
+    private void maybeLoadOlderHistory() {
+        if (mLoadingOlderHistory || mNextHistoryLoadStart <= 0 || mRecycler == null) return;
+        if (!(mRecycler.getLayoutManager() instanceof LinearLayoutManager)) return;
+
+        LinearLayoutManager layoutManager = (LinearLayoutManager) mRecycler.getLayoutManager();
+        if (layoutManager == null) return;
+
+        int firstVisible = layoutManager.findFirstVisibleItemPosition();
+        if (firstVisible < 0 || firstVisible > PAGINATION_PREFETCH_TRIGGER) return;
+
+        int currentStart = mNextHistoryLoadStart;
+        int nextStart = Math.max(0, currentStart - MESSAGE_PAGE_SIZE);
+        if (nextStart >= currentStart) return;
+
+        mLoadingOlderHistory = true;
+        List<ChatMessage> olderChunk = new ArrayList<>(mAllHistoryMessages.subList(nextStart, currentStart));
+        if (olderChunk.isEmpty()) {
+            mLoadingOlderHistory = false;
+            return;
+        }
+
+        mMessages.addAll(0, olderChunk);
+        shiftQueuedIndexes(olderChunk.size());
+        mAdapter.notifyItemRangeInserted(0, olderChunk.size());
+
+        int previousOffset = 0;
+        View firstView = layoutManager.findViewByPosition(firstVisible);
+        if (firstView != null) {
+            previousOffset = firstView.getTop();
+        }
+        layoutManager.scrollToPositionWithOffset(firstVisible + olderChunk.size(), previousOffset);
+
+        mNextHistoryLoadStart = nextStart;
+        mLoadingOlderHistory = false;
+    }
+
+    private void shiftQueuedIndexes(int delta) {
+        if (delta <= 0 || mQueuedMessageIndexes.isEmpty()) return;
+        ArrayList<Long> keys = new ArrayList<>(mQueuedMessageIndexes.keySet());
+        for (Long key : keys) {
+            Integer current = mQueuedMessageIndexes.get(key);
+            if (current == null) continue;
+            mQueuedMessageIndexes.put(key, current + delta);
+        }
     }
 
     private void syncConversationHistoryToCache(@Nullable String conversationId) {
@@ -377,6 +496,9 @@ public class ChatActivity extends AppCompatActivity {
                 String id = ClawPhonesAPI.createConversation(ChatActivity.this);
                 runSafe(() -> {
                     mConversationId = id;
+                    Map<String, Object> analyticsProps = new HashMap<>();
+                    analyticsProps.put("conversation_id", id);
+                    AnalyticsManager.getInstance(getApplicationContext()).track("conversation_created", analyticsProps);
                     if (mCache != null) {
                         long now = System.currentTimeMillis() / 1000L;
                         mCache.upsertConversation(new ClawPhonesAPI.ConversationSummary(
@@ -439,6 +561,12 @@ public class ChatActivity extends AppCompatActivity {
 
         mLastUserText = text;
         mInput.setText("");
+
+        Map<String, Object> analyticsProps = new HashMap<>();
+        analyticsProps.put("conversation_id", TextUtils.isEmpty(mConversationId) ? "" : mConversationId);
+        analyticsProps.put("message_length", text.length());
+        analyticsProps.put("queued", !canSendImmediately());
+        AnalyticsManager.getInstance(getApplicationContext()).track("message_sent", analyticsProps);
 
         if (canSendImmediately()) {
             int userIndex = addUserMessage(text);
@@ -1202,27 +1330,186 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    private static final Pattern MARKDOWN_IMAGE_PATTERN =
+        Pattern.compile("!\\[[^\\]]*\\]\\((https?://[^\\s)]+)\\)");
+
+    @NonNull
+    private static ParsedVisionContent parseVisionContent(@Nullable String raw) {
+        String trimmed = safeTrim(raw);
+        if (trimmed.isEmpty()) {
+            return new ParsedVisionContent("", null);
+        }
+
+        StringBuilder text = new StringBuilder();
+        String[] imageUrl = new String[1];
+
+        if (looksLikeJson(trimmed)) {
+            try {
+                Object parsed = new org.json.JSONTokener(trimmed).nextValue();
+                extractVisionFromObject(parsed, text, imageUrl);
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (text.length() == 0) {
+            text.append(trimmed);
+        }
+        if (TextUtils.isEmpty(imageUrl[0])) {
+            imageUrl[0] = extractMarkdownImageUrl(text.toString());
+        }
+
+        String normalizedText = normalizeVisibleText(text.toString(), imageUrl[0]);
+        return new ParsedVisionContent(normalizedText, imageUrl[0]);
+    }
+
+    private static boolean looksLikeJson(@NonNull String value) {
+        return (value.startsWith("{") && value.endsWith("}"))
+            || (value.startsWith("[") && value.endsWith("]"));
+    }
+
+    private static void extractVisionFromObject(@Nullable Object node,
+                                                @NonNull StringBuilder text,
+                                                @NonNull String[] imageUrl) {
+        if (node == null) return;
+
+        if (node instanceof JSONObject) {
+            JSONObject object = (JSONObject) node;
+            appendTextCandidate(text, object.optString("text", ""));
+            appendTextCandidate(text, object.optString("content", ""));
+            appendTextCandidate(text, object.optString("message", ""));
+            appendTextCandidate(text, object.optString("caption", ""));
+            appendImageCandidate(imageUrl, object.optString("image_url", ""));
+            appendImageCandidate(imageUrl, object.optString("imageUrl", ""));
+            appendImageCandidate(imageUrl, object.optString("url", ""));
+
+            Object contentNode = object.opt("content");
+            if (contentNode instanceof JSONArray || contentNode instanceof JSONObject) {
+                extractVisionFromObject(contentNode, text, imageUrl);
+            }
+            Object partsNode = object.opt("parts");
+            if (partsNode instanceof JSONArray || partsNode instanceof JSONObject) {
+                extractVisionFromObject(partsNode, text, imageUrl);
+            }
+            Object imageNode = object.opt("image");
+            if (imageNode instanceof JSONArray || imageNode instanceof JSONObject) {
+                extractVisionFromObject(imageNode, text, imageUrl);
+            } else if (imageNode instanceof String) {
+                appendImageCandidate(imageUrl, String.valueOf(imageNode));
+            }
+            return;
+        }
+
+        if (node instanceof JSONArray) {
+            JSONArray array = (JSONArray) node;
+            for (int i = 0; i < array.length(); i++) {
+                extractVisionFromObject(array.opt(i), text, imageUrl);
+            }
+            return;
+        }
+
+        if (node instanceof String) {
+            appendTextCandidate(text, String.valueOf(node));
+        }
+    }
+
+    private static void appendTextCandidate(@NonNull StringBuilder target, @Nullable String candidate) {
+        String normalized = safeTrim(candidate);
+        if (normalized.isEmpty()) return;
+        if (looksLikeUrl(normalized)) return;
+        if (target.length() > 0) {
+            target.append("\n");
+        }
+        target.append(normalized);
+    }
+
+    private static void appendImageCandidate(@NonNull String[] imageUrlHolder, @Nullable String candidate) {
+        if (!TextUtils.isEmpty(imageUrlHolder[0])) return;
+        String normalized = safeTrim(candidate);
+        if (!looksLikeUrl(normalized)) return;
+        String lower = normalized.toLowerCase(Locale.US);
+        if (!(lower.endsWith(".png")
+            || lower.endsWith(".jpg")
+            || lower.endsWith(".jpeg")
+            || lower.endsWith(".webp")
+            || lower.endsWith(".gif")
+            || lower.contains("image"))) {
+            if (!lower.startsWith("https://")) return;
+        }
+        imageUrlHolder[0] = normalized;
+    }
+
+    private static boolean looksLikeUrl(@Nullable String value) {
+        if (value == null) return false;
+        String normalized = value.trim().toLowerCase(Locale.US);
+        return normalized.startsWith("http://") || normalized.startsWith("https://");
+    }
+
+    @Nullable
+    private static String extractMarkdownImageUrl(@NonNull String text) {
+        Matcher matcher = MARKDOWN_IMAGE_PATTERN.matcher(text);
+        if (matcher.find()) {
+            return safeTrim(matcher.group(1));
+        }
+        return null;
+    }
+
+    @NonNull
+    private static String normalizeVisibleText(@NonNull String text, @Nullable String imageUrl) {
+        String normalized = text.replace("\r\n", "\n").trim();
+        if (TextUtils.isEmpty(imageUrl)) {
+            return normalized;
+        }
+
+        Matcher matcher = MARKDOWN_IMAGE_PATTERN.matcher(normalized);
+        String withoutMarkdownImage = matcher.replaceAll("").trim();
+        if (!withoutMarkdownImage.isEmpty()) {
+            return withoutMarkdownImage;
+        }
+        return normalized;
+    }
+
+    static final class ParsedVisionContent {
+        final String text;
+        @Nullable final String imageUrl;
+
+        ParsedVisionContent(@Nullable String text, @Nullable String imageUrl) {
+            this.text = text == null ? "" : text;
+            this.imageUrl = TextUtils.isEmpty(safeTrim(imageUrl)) ? null : safeTrim(imageUrl);
+        }
+    }
+
     static final class ChatMessage {
         enum Role { USER, ASSISTANT }
         enum DeliveryState { NONE, SENDING, FAILED }
 
+        private static final AtomicLong NEXT_STABLE_ID = new AtomicLong(1L);
+
+        final long stableId;
         final Role role;
         String text;
         boolean isThinking;
+        @Nullable final String imageUrl;
         long queueId = -1L;
         DeliveryState deliveryState = DeliveryState.NONE;
         int retryCount = 0;
 
         ChatMessage(Role role, String text, boolean isThinking) {
+            this(role, text, isThinking, null);
+        }
+
+        ChatMessage(Role role, String text, boolean isThinking, @Nullable String imageUrl) {
+            this.stableId = NEXT_STABLE_ID.getAndIncrement();
             this.role = role;
             this.text = text;
             this.isThinking = isThinking;
+            this.imageUrl = TextUtils.isEmpty(safeTrim(imageUrl)) ? null : safeTrim(imageUrl);
         }
     }
 
     static final class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.VH> {
         private static final int TYPE_AI = 0;
         private static final int TYPE_USER = 1;
+        private static final MessageImageLoader IMAGE_LOADER = new MessageImageLoader();
 
         private final ArrayList<ChatMessage> messages;
         private final RetryClickListener retryClickListener;
@@ -1234,12 +1521,18 @@ public class ChatActivity extends AppCompatActivity {
         ChatAdapter(ArrayList<ChatMessage> messages, @Nullable RetryClickListener retryClickListener) {
             this.messages = messages;
             this.retryClickListener = retryClickListener;
+            setHasStableIds(true);
         }
 
         @Override
         public int getItemViewType(int position) {
             ChatMessage m = messages.get(position);
             return m.role == ChatMessage.Role.USER ? TYPE_USER : TYPE_AI;
+        }
+
+        @Override
+        public long getItemId(int position) {
+            return messages.get(position).stableId;
         }
 
         @NonNull
@@ -1259,12 +1552,27 @@ public class ChatActivity extends AppCompatActivity {
         }
 
         @Override
+        public void onViewRecycled(@NonNull VH holder) {
+            holder.unbind();
+            super.onViewRecycled(holder);
+        }
+
+        @Override
         public int getItemCount() {
             return messages.size();
         }
 
+        void onTrimMemory(int level) {
+            IMAGE_LOADER.onTrimMemory(level);
+        }
+
+        void clearMemoryCaches() {
+            IMAGE_LOADER.clear();
+        }
+
         static final class VH extends RecyclerView.ViewHolder {
             final TextView text;
+            final ImageView image;
             final View bubble;
             final TextView statusText;
             final TextView retryButton;
@@ -1272,6 +1580,7 @@ public class ChatActivity extends AppCompatActivity {
             VH(@NonNull View itemView) {
                 super(itemView);
                 text = itemView.findViewById(R.id.message_text);
+                image = itemView.findViewById(R.id.message_image);
                 bubble = itemView.findViewById(R.id.message_bubble);
                 statusText = itemView.findViewById(R.id.message_status);
                 retryButton = itemView.findViewById(R.id.message_retry);
@@ -1282,6 +1591,17 @@ public class ChatActivity extends AppCompatActivity {
 
             void bind(ChatMessage message, boolean isUser, boolean isThinking,
                       @Nullable RetryClickListener retryClickListener) {
+                if (image != null) {
+                    if (!TextUtils.isEmpty(message.imageUrl)) {
+                        image.setVisibility(View.VISIBLE);
+                        IMAGE_LOADER.loadInto(image, message.imageUrl);
+                    } else {
+                        IMAGE_LOADER.cancel(image);
+                        image.setImageDrawable(null);
+                        image.setVisibility(View.GONE);
+                    }
+                }
+
                 if (text != null) {
                     if (isThinking) {
                         text.setText(message.text);
@@ -1336,6 +1656,177 @@ public class ChatActivity extends AppCompatActivity {
                     }
                     bubble.setLayoutParams(lp);
                 }
+            }
+
+            void unbind() {
+                if (image != null) {
+                    IMAGE_LOADER.cancel(image);
+                    image.setImageDrawable(null);
+                    image.setVisibility(View.GONE);
+                }
+                if (text != null) {
+                    text.setText(null);
+                }
+                if (retryButton != null) {
+                    retryButton.setOnClickListener(null);
+                }
+            }
+        }
+
+        static final class MessageImageLoader {
+            private static final int DEFAULT_THUMB_SIZE_PX = 512;
+            private static final int MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024;
+            private static final int THREAD_POOL_SIZE = 2;
+            private static final int CACHE_BYTES = 32 * 1024 * 1024;
+
+            private final LruCache<String, Bitmap> bitmapCache = new LruCache<String, Bitmap>(CACHE_BYTES) {
+                @Override
+                protected int sizeOf(@NonNull String key, @NonNull Bitmap value) {
+                    return value.getByteCount();
+                }
+            };
+            private final ExecutorService decodeExecutor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+            private final Handler uiHandler = new Handler(Looper.getMainLooper());
+
+            void loadInto(@NonNull ImageView target, @Nullable String rawUrl) {
+                String imageUrl = safeTrim(rawUrl);
+                if (imageUrl.isEmpty()) {
+                    cancel(target);
+                    target.setImageDrawable(null);
+                    target.setVisibility(View.GONE);
+                    return;
+                }
+
+                String cacheKey = buildCacheKey(imageUrl, DEFAULT_THUMB_SIZE_PX);
+                target.setTag(cacheKey);
+                Bitmap cached = bitmapCache.get(cacheKey);
+                if (cached != null && !cached.isRecycled()) {
+                    target.setImageBitmap(cached);
+                    return;
+                }
+
+                target.setImageDrawable(null);
+                decodeExecutor.execute(() -> {
+                    Bitmap decoded = decodeFromNetwork(imageUrl, DEFAULT_THUMB_SIZE_PX, DEFAULT_THUMB_SIZE_PX);
+                    if (decoded == null) return;
+                    bitmapCache.put(cacheKey, decoded);
+
+                    uiHandler.post(() -> {
+                        Object currentTag = target.getTag();
+                        if (!(currentTag instanceof String) || !cacheKey.equals(currentTag)) {
+                            return;
+                        }
+                        target.setImageBitmap(decoded);
+                    });
+                });
+            }
+
+            void cancel(@NonNull ImageView target) {
+                target.setTag(null);
+            }
+
+            void onTrimMemory(int level) {
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+                    || level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+                    bitmapCache.evictAll();
+                    return;
+                }
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+                    bitmapCache.trimToSize(Math.max(0, CACHE_BYTES / 4));
+                } else if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+                    bitmapCache.trimToSize(Math.max(0, CACHE_BYTES / 2));
+                }
+            }
+
+            void clear() {
+                bitmapCache.evictAll();
+            }
+
+            @Nullable
+            private Bitmap decodeFromNetwork(@NonNull String url, int reqWidth, int reqHeight) {
+                HttpURLConnection conn = null;
+                try {
+                    conn = (HttpURLConnection) new URL(url).openConnection();
+                    conn.setConnectTimeout(8_000);
+                    conn.setReadTimeout(10_000);
+                    conn.setDoInput(true);
+                    conn.setRequestProperty("Accept", "image/*");
+
+                    int code = conn.getResponseCode();
+                    if (code < 200 || code >= 300) return null;
+
+                    byte[] bytes;
+                    try (InputStream in = conn.getInputStream();
+                         ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                        byte[] buffer = new byte[8 * 1024];
+                        int read;
+                        int total = 0;
+                        while ((read = in.read(buffer)) != -1) {
+                            total += read;
+                            if (total > MAX_DOWNLOAD_BYTES) {
+                                return null;
+                            }
+                            out.write(buffer, 0, read);
+                        }
+                        bytes = out.toByteArray();
+                    }
+
+                    return decodeDownsampled(bytes, reqWidth, reqHeight);
+                } catch (Exception ignored) {
+                    return null;
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+            }
+
+            @Nullable
+            private Bitmap decodeDownsampled(@NonNull byte[] imageBytes, int reqWidth, int reqHeight) {
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, bounds);
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+
+                BitmapFactory.Options decode = new BitmapFactory.Options();
+                decode.inSampleSize = computeInSampleSize(bounds, reqWidth, reqHeight);
+                decode.inPreferredConfig = Bitmap.Config.RGB_565;
+                decode.inDither = true;
+
+                Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, decode);
+                if (bitmap == null) return null;
+
+                if (bitmap.getWidth() > reqWidth || bitmap.getHeight() > reqHeight) {
+                    float scale = Math.min(
+                        reqWidth / (float) Math.max(1, bitmap.getWidth()),
+                        reqHeight / (float) Math.max(1, bitmap.getHeight())
+                    );
+                    if (scale > 0f && scale < 1f) {
+                        int scaledWidth = Math.max(1, Math.round(bitmap.getWidth() * scale));
+                        int scaledHeight = Math.max(1, Math.round(bitmap.getHeight() * scale));
+                        Bitmap scaled = Bitmap.createScaledBitmap(bitmap, scaledWidth, scaledHeight, true);
+                        if (scaled != bitmap) {
+                            bitmap.recycle();
+                            bitmap = scaled;
+                        }
+                    }
+                }
+                return bitmap;
+            }
+
+            private int computeInSampleSize(@NonNull BitmapFactory.Options options, int reqWidth, int reqHeight) {
+                int inSampleSize = 1;
+                int width = Math.max(1, options.outWidth);
+                int height = Math.max(1, options.outHeight);
+                int safeReqWidth = Math.max(1, reqWidth);
+                int safeReqHeight = Math.max(1, reqHeight);
+
+                while ((height / inSampleSize) > safeReqHeight || (width / inSampleSize) > safeReqWidth) {
+                    inSampleSize <<= 1;
+                }
+                return Math.max(1, inSampleSize);
+            }
+
+            private String buildCacheKey(@NonNull String imageUrl, int size) {
+                return imageUrl + "#" + size;
             }
         }
 

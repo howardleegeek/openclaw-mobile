@@ -16,7 +16,7 @@ public class ClawPhonesLauncherActivity extends Activity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        CrashReporter.init(getApplicationContext());
+        ClawPhonesApp.ensureDeferredInit(getApplicationContext());
 
         SharedPreferences prefs = getSharedPreferences(OnboardingActivity.PREFS_NAME, MODE_PRIVATE);
         boolean hasSeenOnboarding = prefs.getBoolean(OnboardingActivity.KEY_HAS_SEEN_ONBOARDING, false);
