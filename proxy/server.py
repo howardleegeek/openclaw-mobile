@@ -510,7 +510,7 @@ async def _require_user(request: Request) -> Tuple[str, Dict[str, Any]]:
 async def _get_tier_for_token(token: str) -> str:
     row = await _get_token_row(token)
     if not row:
-        return "free"
+        raise HTTPException(status_code=401, detail="invalid token")
     if row.get("status") != "active":
         raise HTTPException(status_code=403, detail="token disabled")
     return row.get("tier") or "free"
