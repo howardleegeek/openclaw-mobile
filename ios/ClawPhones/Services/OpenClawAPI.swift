@@ -139,17 +139,15 @@ final class OpenClawAPI {
 
     struct UploadResponse: Codable, Hashable {
         let fileId: String
-        let filename: String
+        let url: String
         let mimeType: String
         let size: Int
-        let extractedText: String?
 
         enum CodingKeys: String, CodingKey {
             case fileId = "file_id"
-            case filename
+            case url
             case mimeType = "mime_type"
             case size
-            case extractedText = "extracted_text"
         }
     }
 
@@ -413,7 +411,9 @@ final class OpenClawAPI {
     }
 
     func uploadFile(conversationId: String, fileData: Data, filename: String, mimeType: String) async throws -> UploadResponse {
-        let url = URL(string: "\(baseURLString)/v1/conversations/\(conversationId)/upload")!
+        var components = URLComponents(string: "\(baseURLString)/v1/upload")!
+        components.queryItems = [URLQueryItem(name: "conversation_id", value: conversationId)]
+        let url = components.url!
         var request = try await authorizedRequest(url: url, method: "POST")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 

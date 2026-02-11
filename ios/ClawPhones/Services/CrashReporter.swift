@@ -140,17 +140,12 @@ final class CrashReporter {
     }
 
     private func authToken() -> String? {
-        if let token = UserDefaults.standard.string(forKey: "auth_token")?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if let token = KeychainHelper.shared.readDeviceToken()?.trimmingCharacters(in: .whitespacesAndNewlines),
            !token.isEmpty {
             return token
         }
 
         if let token = KeychainHelper.shared.read(key: "auth_token")?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !token.isEmpty {
-            return token
-        }
-
-        if let token = DeviceConfig.shared.deviceToken?.trimmingCharacters(in: .whitespacesAndNewlines),
            !token.isEmpty {
             return token
         }

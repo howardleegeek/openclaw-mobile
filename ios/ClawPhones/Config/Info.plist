@@ -33,29 +33,13 @@
     <dict>
         <key>NSAllowsArbitraryLoads</key>
         <false/>
-        <key>NSExceptionDomains</key>
-        <dict>
-            <key>3.142.69.6</key>
-            <dict>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
-                <true/>
-            </dict>
-            <key>localhost</key>
-            <dict>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
-                <true/>
-                <key>NSIncludesSubdomains</key>
-                <true/>
-            </dict>
-            <key>127.0.0.1</key>
-            <dict>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
-                <true/>
-            </dict>
-        </dict>
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>ClawPhones 需要访问相机以拍摄并上传图片。</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>ClawPhones 需要定位权限用于 Node Mode 持续采集地理位置。</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>ClawPhones 需要后台定位权限以在 Node Mode 运行时持续上传位置。</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>ClawPhones 需要访问相册以选择图片进行分享和对话。</string>
     <key>NSMicrophoneUsageDescription</key>
@@ -71,5 +55,9 @@
         <key>UIApplicationSupportsMultipleScenes</key>
         <false/>
     </dict>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>location</string>
+    </array>
 </dict>
 </plist>

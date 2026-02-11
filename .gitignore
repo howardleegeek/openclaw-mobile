@@ -1,5 +1,7 @@
 .DS_Store
 artifacts/
+.env
+android/clawphones-android/gradle.properties
 
 # Android
 android/botdrop-android/**/build/

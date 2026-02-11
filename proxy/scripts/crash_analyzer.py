@@ -30,7 +30,7 @@ from pathlib import Path
 
 # ── Config ──────────────────────────────────────────────
 API_BASE = "http://3.142.69.6:8080"
-ADMIN_KEY = "clawphones2026"
+ADMIN_KEY = os.environ.get("CLAWPHONES_ADMIN_KEY", "")
 OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 LLM_MODEL = "moonshotai/kimi-k2"

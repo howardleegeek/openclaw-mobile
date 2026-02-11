@@ -32,7 +32,7 @@ from pathlib import Path
 
 # ── Config ──────────────────────────────────────────────
 API_BASE = "http://3.142.69.6:8080"
-ADMIN_KEY = "clawphones2026"
+ADMIN_KEY = os.environ.get("CLAWPHONES_ADMIN_KEY", "")
 
 SPECS_DIR = Path.home() / "Downloads" / "specs"
 LOG_DIR = Path.home() / "Downloads" / "scripts" / "logs"

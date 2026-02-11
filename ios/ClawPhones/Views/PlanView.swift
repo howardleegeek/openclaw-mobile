@@ -35,7 +35,7 @@ struct PlanView: View {
 
     private var usageCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("当前计划：\(plan.tier.rawValue)")
+            Text("当前计划：\(plan.tier.displayName)")
                 .font(.headline)
 
             Text("今日用量：\(plan.usedToday)/\(plan.dailyLimit) 条消息")

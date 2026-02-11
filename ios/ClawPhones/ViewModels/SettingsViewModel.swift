@@ -13,11 +13,35 @@ extension Notification.Name {
 @MainActor
 final class SettingsViewModel: ObservableObject {
     enum PlanTier: String, CaseIterable, Identifiable, Codable {
-        case free = "Free"
-        case pro = "Pro"
-        case max = "Max"
+        case free
+        case pro
+        case max
 
         var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .free: return "Free"
+            case .pro: return "Pro"
+            case .max: return "Max"
+            }
+        }
+
+        static func fromAPI(_ value: String?) -> PlanTier? {
+            guard let raw = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !raw.isEmpty else {
+                return nil
+            }
+            switch raw {
+            case "free", "basic":
+                return .free
+            case "pro", "plus", "premium":
+                return .pro
+            case "max", "enterprise":
+                return .max
+            default:
+                return PlanTier(rawValue: raw)
+            }
+        }
     }
 
     enum Language: String, CaseIterable, Identifiable, Codable {
@@ -37,21 +61,41 @@ final class SettingsViewModel: ObservableObject {
     }
 
     enum Persona: String, CaseIterable, Identifiable, Codable {
-        case general
-        case coding
-        case writing
-        case translation
+        case assistant
+        case coder
+        case writer
+        case translator
         case custom
 
         var id: String { rawValue }
 
         var displayName: String {
             switch self {
-            case .general: return "🧠 通用助手"
-            case .coding: return "💻 编程专家"
-            case .writing: return "✍️ 写作助手"
-            case .translation: return "🌍 翻译官"
+            case .assistant: return "🧠 通用助手"
+            case .coder: return "💻 编程专家"
+            case .writer: return "✍️ 写作助手"
+            case .translator: return "🌍 翻译官"
             case .custom: return "⚙️ 自定义"
+            }
+        }
+
+        static func fromAPI(_ value: String?) -> Persona? {
+            guard let raw = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !raw.isEmpty else {
+                return nil
+            }
+            switch raw {
+            case "assistant", "general":
+                return .assistant
+            case "coder", "coding":
+                return .coder
+            case "writer", "writing":
+                return .writer
+            case "translator", "translation":
+                return .translator
+            case "custom":
+                return .custom
+            default:
+                return Persona(rawValue: raw)
             }
         }
     }
@@ -85,7 +129,7 @@ final class SettingsViewModel: ObservableObject {
         var customPrompt: String
         var temperature: Double
 
-        static let mock = AIConfig(persona: .general, customPrompt: "", temperature: 0.7)
+        static let mock = AIConfig(persona: .assistant, customPrompt: "", temperature: 0.7)
     }
 
     @Published var profile: UserProfile = .mock
@@ -108,11 +152,10 @@ final class SettingsViewModel: ObservableObject {
                 userId: payload.userId,
                 email: payload.email,
                 name: payload.name ?? profile.name,
-                tier: PlanTier(rawValue: payload.tier) ?? profile.tier,
+                tier: PlanTier.fromAPI(payload.tier) ?? profile.tier,
                 language: Language(rawValue: payload.language ?? profile.language.rawValue) ?? profile.language
             )
         } catch {
-            // TODO: backend may not be ready yet; keep mock so UI can render.
             if profile.email.isEmpty {
                 profile = .mock
             }
@@ -139,7 +182,6 @@ final class SettingsViewModel: ObservableObject {
                 properties: ["setting": "name"]
             )
         } catch {
-            // TODO: backend may not be ready yet; keep local update.
             profile = previous
             errorMessage = error.localizedDescription
         }
@@ -164,7 +206,6 @@ final class SettingsViewModel: ObservableObject {
                 ]
             )
         } catch {
-            // TODO: backend may not be ready yet; keep local update.
             profile = previous
             errorMessage = error.localizedDescription
         }
@@ -184,7 +225,6 @@ final class SettingsViewModel: ObservableObject {
             _ = try await OpenClawAPI.shared.updatePassword(oldPassword: oldPassword, newPassword: newPassword)
             passwordChangeSucceeded = true
         } catch {
-            // TODO: backend may not be ready yet.
             errorMessage = error.localizedDescription
         }
     }
@@ -196,7 +236,7 @@ final class SettingsViewModel: ObservableObject {
 
         do {
             let payload = try await OpenClawAPI.shared.getPlan()
-            let tier = PlanTier(rawValue: payload.tier) ?? plan.tier
+            let tier = PlanTier.fromAPI(payload.tier) ?? plan.tier
 
             // Best-effort mapping; backend fields may change during sync.
             let limit = payload.limits?.messagesPerDay ?? plan.dailyLimit
@@ -204,7 +244,6 @@ final class SettingsViewModel: ObservableObject {
 
             plan = PlanInfo(tier: tier, dailyLimit: limit, usedToday: used)
         } catch {
-            // TODO: backend may not be ready yet; keep mock.
             errorMessage = error.localizedDescription
         }
     }
@@ -216,12 +255,11 @@ final class SettingsViewModel: ObservableObject {
 
         do {
             let payload = try await OpenClawAPI.shared.getAIConfig()
-            let persona = Persona(rawValue: payload.persona) ?? aiConfig.persona
+            let persona = Persona.fromAPI(payload.persona) ?? aiConfig.persona
             let temp = payload.temperature ?? aiConfig.temperature
             let prompt = payload.customPrompt ?? aiConfig.customPrompt
             aiConfig = AIConfig(persona: persona, customPrompt: prompt, temperature: temp)
         } catch {
-            // TODO: backend may not be ready yet; keep mock.
             errorMessage = error.localizedDescription
         }
     }
@@ -242,7 +280,7 @@ final class SettingsViewModel: ObservableObject {
                 customPrompt: customPrompt,
                 temperature: temperature
             )
-            let nextPersona = Persona(rawValue: payload.persona) ?? persona
+            let nextPersona = Persona.fromAPI(payload.persona) ?? persona
             aiConfig = AIConfig(
                 persona: nextPersona,
                 customPrompt: payload.customPrompt ?? (customPrompt ?? ""),
@@ -256,7 +294,6 @@ final class SettingsViewModel: ObservableObject {
                 ]
             )
         } catch {
-            // TODO: backend may not be ready yet; keep local update.
             aiConfig = previous
             errorMessage = error.localizedDescription
         }
@@ -294,7 +331,6 @@ final class SettingsViewModel: ObservableObject {
 
             NotificationCenter.default.post(name: .clawPhonesConversationsDidChange, object: nil)
         } catch {
-            // TODO: backend may not be ready yet.
             errorMessage = error.localizedDescription
         }
     }

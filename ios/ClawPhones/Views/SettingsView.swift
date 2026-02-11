@@ -70,7 +70,7 @@ struct SettingsView: View {
                     HStack {
                         Text("当前计划")
                         Spacer()
-                        Text(viewModel.plan.tier.rawValue)
+                        Text(viewModel.plan.tier.displayName)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -300,10 +300,10 @@ struct SettingsView: View {
     private func personaSummary(_ persona: SettingsViewModel.Persona) -> String {
         // Settings summary without emoji prefix.
         switch persona {
-        case .general: return "通用助手"
-        case .coding: return "编程专家"
-        case .writing: return "写作助手"
-        case .translation: return "翻译官"
+        case .assistant: return "通用助手"
+        case .coder: return "编程专家"
+        case .writer: return "写作助手"
+        case .translator: return "翻译官"
         case .custom: return "自定义"
         }
     }

@@ -368,7 +368,7 @@ public class AuthFragment extends Fragment {
         
         showStatus(getString(R.string.auth_status_oauth_not_implemented), false);
         
-        // TODO: Implement OAuth via openclaw CLI
+        // Planned path: implement provider OAuth handoff through openclaw CLI.
     }
 
     private void verifyAndContinue() {

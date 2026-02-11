@@ -3,7 +3,7 @@
 # Usage: bash test_api.sh [BASE_URL]
 
 BASE=${1:-"http://3.142.69.6:8080"}
-ADMIN_KEY="clawphones2026"
+ADMIN_KEY="${CLAWPHONES_ADMIN_KEY:?missing CLAWPHONES_ADMIN_KEY}"
 PASS=0
 FAIL=0
 

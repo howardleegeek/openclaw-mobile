@@ -127,4 +127,4 @@
 - **Simulator:** iPhone 17 Pro (0E90379B-E6C7-4913-96DE-23F02BF2724F)
 - **Server:** AWS EC2 t3.micro, Python 3.11, FastAPI + uvicorn
 - **LLM Providers:** DeepSeek (free), Kimi K2 (pro), Claude Sonnet 4 (max) via OpenRouter
-- **Admin Key:** clawphones2026
+- **Admin Key:** <REDACTED_ADMIN_KEY>

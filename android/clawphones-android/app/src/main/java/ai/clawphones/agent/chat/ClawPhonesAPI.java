@@ -3,6 +3,9 @@ package ai.clawphones.agent.chat;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.security.crypto.EncryptedSharedPreferences;
+import androidx.security.crypto.MasterKeys;
+
 import com.termux.shared.logger.Logger;
 
 import org.json.JSONArray;
@@ -32,7 +35,7 @@ import java.util.UUID;
 /**
  * Minimal HTTP client for ClawPhones backend API.
  *
- * BASE_URL: http://3.142.69.6:8080
+ * BASE_URL: https://3.142.69.6:8080
  *
  * Endpoints:
  *   POST /v1/auth/register
@@ -45,15 +48,17 @@ public class ClawPhonesAPI {
 
     private static final String LOG_TAG = "ClawPhonesAPI";
 
-    public static final String BASE_URL = "http://3.142.69.6:8080";
+    public static final String BASE_URL = "https://3.142.69.6:8080";
 
     private static final int CONNECT_TIMEOUT_MS = 15_000;
     private static final int READ_TIMEOUT_MS = 60_000;
     private static final int STREAM_READ_TIMEOUT_MS = 120_000;
 
     private static final String PREFS = "clawphones_api";
+    private static final String SECURE_PREFS = "clawphones_secure_prefs";
     private static final String PREF_TOKEN = "token";
     private static final String PREF_TOKEN_EXPIRES_AT = "token_expires_at";
+    private static final String PREF_SECURE_MIGRATED = "secure_migrated_v1";
     private static final long TOKEN_TTL_SECONDS = 30L * 24L * 60L * 60L;
     private static final long TOKEN_REFRESH_WINDOW_SECONDS = 7L * 24L * 60L * 60L;
     private static final List<String> DEFAULT_PERSONAS = Arrays.asList(
@@ -203,6 +208,50 @@ public class ClawPhonesAPI {
 
     // ── SharedPreferences helpers ───────────────────────────────────────────────
 
+    private static SharedPreferences getSecurePrefs(Context context) {
+        if (context == null) {
+            return null;
+        }
+        try {
+            SharedPreferences secure = EncryptedSharedPreferences.create(
+                SECURE_PREFS,
+                MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC),
+                context,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            );
+            migrateLegacyTokenIfNeeded(context, secure);
+            return secure;
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "EncryptedSharedPreferences unavailable, fallback to legacy prefs: " + e.getMessage());
+            return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        }
+    }
+
+    private static void migrateLegacyTokenIfNeeded(Context context, SharedPreferences securePrefs) {
+        if (context == null || securePrefs == null) return;
+        if (securePrefs.getBoolean(PREF_SECURE_MIGRATED, false)) return;
+
+        SharedPreferences legacyPrefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String legacyToken = legacyPrefs.getString(PREF_TOKEN, null);
+        long legacyExpiresAt = legacyPrefs.getLong(PREF_TOKEN_EXPIRES_AT, 0L);
+
+        SharedPreferences.Editor secureEditor = securePrefs.edit();
+        if (legacyToken != null && !legacyToken.trim().isEmpty()) {
+            secureEditor.putString(PREF_TOKEN, legacyToken.trim());
+        }
+        if (legacyExpiresAt > 0L) {
+            secureEditor.putLong(PREF_TOKEN_EXPIRES_AT, legacyExpiresAt);
+        }
+        secureEditor.putBoolean(PREF_SECURE_MIGRATED, true);
+        secureEditor.apply();
+
+        legacyPrefs.edit()
+            .remove(PREF_TOKEN)
+            .remove(PREF_TOKEN_EXPIRES_AT)
+            .apply();
+    }
+
     public static void saveToken(Context context, String token) {
         saveToken(context, token, nowEpochSeconds() + TOKEN_TTL_SECONDS);
     }
@@ -211,7 +260,9 @@ public class ClawPhonesAPI {
         if (context == null) return;
         if (token == null) return;
         long normalizedExpiry = normalizeExpiry(expiresAt);
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        SharedPreferences prefs = getSecurePrefs(context);
+        if (prefs == null) return;
+        prefs
             .edit()
             .putString(PREF_TOKEN, token)
             .putLong(PREF_TOKEN_EXPIRES_AT, normalizedExpiry)
@@ -220,7 +271,8 @@ public class ClawPhonesAPI {
 
     public static String getToken(Context context) {
         if (context == null) return null;
-        SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        SharedPreferences sp = getSecurePrefs(context);
+        if (sp == null) return null;
         String t = sp.getString(PREF_TOKEN, null);
         if (t == null) return null;
         t = t.trim();
@@ -235,7 +287,8 @@ public class ClawPhonesAPI {
 
     public static long getTokenExpiresAt(Context context) {
         if (context == null) return 0L;
-        SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        SharedPreferences sp = getSecurePrefs(context);
+        if (sp == null) return 0L;
         return sp.getLong(PREF_TOKEN_EXPIRES_AT, 0L);
     }
 
@@ -246,6 +299,14 @@ public class ClawPhonesAPI {
 
     public static void clearToken(Context context) {
         if (context == null) return;
+        SharedPreferences securePrefs = getSecurePrefs(context);
+        if (securePrefs != null) {
+            securePrefs
+                .edit()
+                .remove(PREF_TOKEN)
+                .remove(PREF_TOKEN_EXPIRES_AT)
+                .apply();
+        }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .remove(PREF_TOKEN)
@@ -585,7 +646,7 @@ public class ClawPhonesAPI {
         if (safeMime.isEmpty()) safeMime = "application/octet-stream";
 
         String boundary = "----clawphones-" + UUID.randomUUID().toString();
-        String urlStr = BASE_URL + "/v1/conversations/" + conversationId + "/upload";
+        String urlStr = BASE_URL + "/v1/upload?conversation_id=" + conversationId;
         HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
         conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
         conn.setReadTimeout(READ_TIMEOUT_MS);

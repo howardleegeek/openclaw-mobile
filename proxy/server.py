@@ -16,6 +16,7 @@ from contextlib import suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 import aiosqlite
@@ -23,7 +24,7 @@ import bcrypt
 import httpx
 import jwt
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Header, HTTPException, Request, Response, UploadFile
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from jwt import InvalidTokenError
 
@@ -46,6 +47,17 @@ _LOGIN_FAILURES: Dict[str, List[int]] = {}
 _LOGIN_FAILS_PER_MINUTE = 5
 _LOGIN_FAIL_WINDOW_SECS = 60
 _LOGIN_LOCKOUT_SECS = 300  # 5 minutes
+RATE_LIMITS: Dict[str, Dict[str, int]] = {
+    "auth": {"requests": 10, "window": 300},
+    "chat": {"requests": 60, "window": 60},
+    "upload": {"requests": 10, "window": 60},
+    "admin": {"requests": 5, "window": 60},
+    "export": {"requests": 3, "window": 300},
+    "crash": {"requests": 20, "window": 60},
+    "default": {"requests": 120, "window": 60},
+}
+_RATE_LIMIT_HITS: Dict[str, List[int]] = {}
+_RATE_LIMIT_LOCK = Lock()
 
 
 def _client_ip(request: Request) -> str:
@@ -87,6 +99,73 @@ def _record_login_failure(ip: str, now: int) -> None:
     ts = _LOGIN_FAILURES.get(ip) or []
     ts.append(int(now))
     _LOGIN_FAILURES[ip] = ts
+
+
+def _rate_limit_target(request: Request) -> Optional[Tuple[str, str]]:
+    method = request.method.upper()
+    path = request.url.path
+
+    # Keep existing dedicated /v1/auth/login behavior unchanged.
+    if method == "POST" and path == "/v1/auth/login":
+        return None
+
+    if method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+
+    if method == "POST" and path in {"/v1/auth/register", "/v1/auth/apple", "/v1/auth/refresh"}:
+        return ("auth", path)
+
+    if method == "POST" and path in {
+        "/v1/chat/completions",
+        "/deepseek/v1/chat/completions",
+        "/kimi/v1/chat/completions",
+        "/claude/v1/chat/completions",
+    }:
+        return ("chat", path)
+
+    if method == "POST" and re.fullmatch(r"/v1/conversations/[^/]+/chat/stream", path):
+        return ("chat", "/v1/conversations/{id}/chat/stream")
+    if method == "POST" and re.fullmatch(r"/v1/conversations/[^/]+/chat", path):
+        return ("chat", "/v1/conversations/{id}/chat")
+
+    if method == "POST" and re.fullmatch(r"/v1/conversations/[^/]+/upload", path):
+        return ("upload", "/v1/conversations/{id}/upload")
+
+    if method == "POST" and path.startswith("/admin/"):
+        return ("admin", "/admin/*")
+
+    if method == "POST" and path == "/v1/user/export":
+        return ("export", path)
+    if method == "DELETE" and path == "/v1/user/account":
+        return ("export", path)
+
+    if method == "POST" and path == "/v1/crash-reports":
+        return ("crash", path)
+
+    return ("default", path)
+
+
+async def _enforce_rate_limit(request: Request) -> None:
+    target = _rate_limit_target(request)
+    if not target:
+        return
+
+    bucket, endpoint = target
+    conf = RATE_LIMITS.get(bucket) or RATE_LIMITS["default"]
+    max_requests = int(conf.get("requests") or 1)
+    window = int(conf.get("window") or 1)
+    now = int(time.time())
+    cutoff = now - window
+    ip = _client_ip(request)
+    key = f"{bucket}:{ip}:{endpoint}"
+
+    with _RATE_LIMIT_LOCK:
+        hits = [t for t in (_RATE_LIMIT_HITS.get(key) or []) if isinstance(t, int) and t > cutoff]
+        if len(hits) >= max_requests:
+            _RATE_LIMIT_HITS[key] = hits
+            raise HTTPException(status_code=429, detail="too many requests")
+        hits.append(now)
+        _RATE_LIMIT_HITS[key] = hits
 
 
 # -----------------------------
@@ -137,6 +216,19 @@ APPLE_JWKS_CACHE_TTL_SECONDS = max(60, int(os.getenv("APPLE_JWKS_CACHE_TTL_SECON
 
 TIER_LEVEL = {"free": 0, "pro": 1, "max": 2}
 LEVEL_TIER = {0: "free", 1: "pro", 2: "max"}
+TIER_ALIASES = {
+    "basic": "free",
+    "plus": "pro",
+    "premium": "pro",
+    "enterprise": "max",
+}
+
+PERSONA_ALIASES = {
+    "general": "assistant",
+    "coding": "coder",
+    "writing": "writer",
+    "translation": "translator",
+}
 
 
 @dataclass(frozen=True)
@@ -223,6 +315,44 @@ PERSONA_PROMPTS: Dict[str, str] = {
 }
 
 
+SUPPORTED_PERSONAS: Tuple[str, ...] = tuple(PERSONA_PROMPTS.keys()) + ("custom",)
+
+
+def _normalize_tier_name(tier: Any, default: str = "free") -> str:
+    raw = str(tier or "").strip().lower()
+    if not raw:
+        return default
+    normalized = TIER_ALIASES.get(raw, raw)
+    if normalized in LIMITS:
+        return normalized
+    return default
+
+
+def _normalize_persona_name(persona: Any, *, default: str = "assistant", allow_custom: bool = True) -> str:
+    raw = str(persona or "").strip().lower()
+    if not raw:
+        return default
+    normalized = PERSONA_ALIASES.get(raw, raw)
+    if normalized in PERSONA_PROMPTS:
+        return normalized
+    if allow_custom and normalized == "custom":
+        return "custom"
+    return default
+
+
+def _normalize_ai_config(ai_config: Dict[str, Any]) -> Dict[str, Any]:
+    normalized: Dict[str, Any] = dict(ai_config or {})
+    normalized["persona"] = _normalize_persona_name(
+        normalized.get("persona"),
+        default="assistant",
+        allow_custom=True,
+    )
+    custom_prompt = normalized.get("custom_prompt")
+    if custom_prompt is not None and not isinstance(custom_prompt, str):
+        normalized.pop("custom_prompt", None)
+    return normalized
+
+
 def _approx_tokens(text: str) -> int:
     # Cheap approximation: ~4 chars per token for mixed CJK/ASCII.
     if not text:
@@ -304,6 +434,7 @@ async def _mint_device_token_for_user(
     now: int,
     expires_at: Optional[int],
 ) -> str:
+    tier = _normalize_tier_name(tier)
     for _ in range(5):
         candidate = _gen_device_token()
         try:
@@ -444,8 +575,8 @@ def _detect_mime_type(file_bytes: bytes, original_name: str) -> str:
             return guessed_type
         return "text/plain"
 
-    guessed_type, _ = mimetypes.guess_type(original_name or "")
-    return guessed_type or "application/octet-stream"
+    # For opaque binary payloads, do not trust filename extension/content-type hints.
+    return "application/octet-stream"
 
 
 def _guess_extension(mime_type: str, original_name: str) -> str:
@@ -514,6 +645,77 @@ def _extract_text_from_file(file_bytes: bytes, mime_type: str) -> Optional[str]:
     if mime_type in {"text/plain", "text/csv", "application/json", "text/markdown"}:
         return file_bytes.decode("utf-8", errors="replace")[:_MAX_EXTRACTED_TEXT]
     return None
+
+
+def _parse_content_disposition_params(header_value: str) -> Dict[str, str]:
+    params: Dict[str, str] = {}
+    if not isinstance(header_value, str):
+        return params
+    for token in header_value.split(";")[1:]:
+        token = token.strip()
+        if "=" not in token:
+            continue
+        key, value = token.split("=", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if value.startswith('"') and value.endswith('"') and len(value) >= 2:
+            value = value[1:-1]
+        params[key] = value
+    return params
+
+
+def _extract_file_field_from_multipart(content_type: str, body: bytes) -> Tuple[str, bytes]:
+    if not isinstance(content_type, str) or "multipart/form-data" not in content_type.lower():
+        raise HTTPException(status_code=400, detail="content-type must be multipart/form-data")
+
+    boundary_match = re.search(r'boundary=(?:"([^"]+)"|([^;]+))', content_type, flags=re.IGNORECASE)
+    if not boundary_match:
+        raise HTTPException(status_code=400, detail="missing multipart boundary")
+    boundary = boundary_match.group(1) or boundary_match.group(2) or ""
+    boundary = boundary.strip()
+    if not boundary:
+        raise HTTPException(status_code=400, detail="invalid multipart boundary")
+
+    delimiter = b"--" + boundary.encode("utf-8", errors="ignore")
+    for chunk in body.split(delimiter):
+        part = chunk.strip()
+        if not part or part == b"--":
+            continue
+        if part.endswith(b"--"):
+            part = part[:-2]
+        part = part.strip(b"\r\n")
+        if not part:
+            continue
+
+        header_block, sep, payload = part.partition(b"\r\n\r\n")
+        if not sep:
+            continue
+
+        headers: Dict[str, str] = {}
+        for raw_line in header_block.split(b"\r\n"):
+            line = raw_line.decode("latin-1", errors="ignore")
+            if ":" not in line:
+                continue
+            k, v = line.split(":", 1)
+            headers[k.strip().lower()] = v.strip()
+
+        disposition = headers.get("content-disposition", "")
+        if "form-data" not in disposition.lower():
+            continue
+        params = _parse_content_disposition_params(disposition)
+        if params.get("name") != "file":
+            continue
+
+        filename = os.path.basename(str(params.get("filename") or "upload.bin").strip() or "upload.bin")
+        if payload.endswith(b"\r\n"):
+            file_bytes = payload[:-2]
+        else:
+            file_bytes = payload
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="empty file not allowed")
+        return filename, file_bytes
+
+    raise HTTPException(status_code=400, detail="multipart field 'file' is required")
 
 
 def _compose_user_text_with_file_context(user_text: str, files: List[Dict[str, Any]]) -> str:
@@ -630,10 +832,7 @@ def _build_oai_messages_from_rows(rows: List[Any], file_map: Dict[str, Dict[str,
 
 
 def _persona_system_prompt(ai_config: Dict[str, Any]) -> Optional[str]:
-    persona = ai_config.get("persona")
-    if not isinstance(persona, str) or not persona.strip():
-        persona = "assistant"
-    persona = persona.strip()
+    persona = _normalize_persona_name(ai_config.get("persona"), default="assistant", allow_custom=True)
 
     if persona == "custom":
         custom_prompt = ai_config.get("custom_prompt")
@@ -835,6 +1034,24 @@ async def _init_db() -> None:
         )
         await db.execute("CREATE INDEX IF NOT EXISTS idx_user_exports_user_created ON user_exports(user_id, created_at DESC)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_user_exports_expires ON user_exports(expires_at)")
+        # Normalize legacy tier aliases/casing to canonical free/pro/max in-place.
+        for legacy, canonical in (
+            ("free", "free"),
+            ("pro", "pro"),
+            ("max", "max"),
+            ("basic", "free"),
+            ("plus", "pro"),
+            ("premium", "pro"),
+            ("enterprise", "max"),
+        ):
+            await db.execute(
+                "UPDATE users SET tier=? WHERE lower(trim(coalesce(tier,'')))=?",
+                (canonical, legacy),
+            )
+            await db.execute(
+                "UPDATE device_tokens SET tier=? WHERE lower(trim(coalesce(tier,'')))=?",
+                (canonical, legacy),
+            )
         await db.commit()
 
 
@@ -851,6 +1068,7 @@ async def _get_token_row(token: str) -> Optional[Dict[str, Any]]:
                 if not row:
                     return None
                 d = dict(row)
+                d["tier"] = _normalize_tier_name(d.get("tier"))
                 exp = d.get("expires_at")
                 if isinstance(exp, int) and exp > 0 and now >= exp:
                     return None
@@ -867,6 +1085,7 @@ async def _get_token_row(token: str) -> Optional[Dict[str, Any]]:
                     if not row:
                         return None
                     d = dict(row)
+                    d["tier"] = _normalize_tier_name(d.get("tier"))
                     d["expires_at"] = None
                     return d
             except sqlite3.OperationalError:
@@ -878,6 +1097,7 @@ async def _get_token_row(token: str) -> Optional[Dict[str, Any]]:
                     if not row:
                         return None
                     d = dict(row)
+                    d["tier"] = _normalize_tier_name(d.get("tier"))
                     d["user_id"] = None
                     d["expires_at"] = None
                     return d
@@ -906,7 +1126,11 @@ async def _get_user_row_by_id(user_id: str) -> Optional[Dict[str, Any]]:
             (user_id,),
         ) as cur:
             row = await cur.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            data = dict(row)
+            data["tier"] = _normalize_tier_name(data.get("tier"))
+            return data
 
 
 async def _get_user_row_by_email(email: str) -> Optional[Dict[str, Any]]:
@@ -932,7 +1156,11 @@ async def _get_user_row_by_email(email: str) -> Optional[Dict[str, Any]]:
             (email,),
         ) as cur:
             row = await cur.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            data = dict(row)
+            data["tier"] = _normalize_tier_name(data.get("tier"))
+            return data
 
 
 async def _get_user_row_by_apple_id(apple_id: str) -> Optional[Dict[str, Any]]:
@@ -958,7 +1186,11 @@ async def _get_user_row_by_apple_id(apple_id: str) -> Optional[Dict[str, Any]]:
             (apple_id,),
         ) as cur:
             row = await cur.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            data = dict(row)
+            data["tier"] = _normalize_tier_name(data.get("tier"))
+            return data
 
 
 async def _get_user_row_for_token_optional(token: str) -> Optional[Dict[str, Any]]:
@@ -1039,7 +1271,7 @@ async def _cleanup_expired_exports(now: int) -> None:
 
 async def _build_user_export_payload(user: Dict[str, Any]) -> Dict[str, Any]:
     user_id = str(user["id"])
-    ai_config = _safe_json_loads_object(user.get("ai_config"))
+    ai_config = _normalize_ai_config(_safe_json_loads_object(user.get("ai_config")))
     now = int(time.time())
 
     async with aiosqlite.connect(TOKEN_DB_PATH) as db:
@@ -1126,7 +1358,7 @@ async def _build_user_export_payload(user: Dict[str, Any]) -> Dict[str, Any]:
             "email": user.get("email") or "",
             "name": user.get("name") or "",
             "avatar_url": user.get("avatar_url"),
-            "tier": user.get("tier") or "free",
+            "tier": _normalize_tier_name(user.get("tier")),
             "language": user.get("language") or "auto",
             "apple_id": user.get("apple_id"),
             "created_at": user.get("created_at"),
@@ -1147,7 +1379,7 @@ async def _build_user_export_payload(user: Dict[str, Any]) -> Dict[str, Any]:
         "device_tokens": [
             {
                 "token": str(r["token"]),
-                "tier": str(r["tier"]),
+                "tier": _normalize_tier_name(r["tier"]),
                 "status": str(r["status"]),
                 "created_at": int(r["created_at"] or 0),
                 "expires_at": int(r["expires_at"]) if isinstance(r["expires_at"], (int, float)) else None,
@@ -1168,7 +1400,7 @@ async def _get_tier_for_token(token: str) -> str:
         raise HTTPException(status_code=401, detail="invalid token")
     if row.get("status") != "active":
         raise HTTPException(status_code=403, detail="token disabled")
-    return row.get("tier") or "free"
+    return _normalize_tier_name(row.get("tier"))
 
 
 def _today_utc() -> str:
@@ -1583,6 +1815,15 @@ def _sse_error_once(message: str) -> AsyncIterator[bytes]:
 app = FastAPI(title="OpenClaw Proxy", version="0.1.0")
 
 
+@app.middleware("http")
+async def _global_rate_limit_middleware(request: Request, call_next):
+    try:
+        await _enforce_rate_limit(request)
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return await call_next(request)
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     await _init_db()
@@ -1771,9 +2012,7 @@ async def auth_login(request: Request) -> Any:
         _record_login_failure(ip, now)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    tier = str(user.get("tier") or "free")
-    if tier not in LIMITS:
-        tier = "free"
+    tier = _normalize_tier_name(user.get("tier"))
 
     user_id = str(user["id"])
 
@@ -1791,7 +2030,7 @@ async def auth_login(request: Request) -> Any:
     # Successful login clears failures for this IP.
     _LOGIN_FAILURES.pop(ip, None)
 
-    ai_config = _safe_json_loads_object(user.get("ai_config"))
+    ai_config = _normalize_ai_config(_safe_json_loads_object(user.get("ai_config")))
     return {
         "user_id": user_id,
         "token": token,
@@ -1959,9 +2198,7 @@ async def auth_apple(request: Request) -> Any:
         if not user:
             raise HTTPException(status_code=500, detail="failed to resolve Apple user")
 
-        tier = str(user.get("tier") or "free")
-        if tier not in LIMITS:
-            tier = "free"
+        tier = _normalize_tier_name(user.get("tier"))
 
         token = await _mint_device_token_for_user(
             db,
@@ -1972,7 +2209,7 @@ async def auth_apple(request: Request) -> Any:
         )
         await db.commit()
 
-    ai_config = _safe_json_loads_object(user.get("ai_config"))
+    ai_config = _normalize_ai_config(_safe_json_loads_object(user.get("ai_config")))
     return {
         "user_id": str(user["id"]),
         "token": token,
@@ -2020,9 +2257,7 @@ async def auth_refresh(request: Request) -> Any:
             user_row = await cur.fetchone()
         if not user_row:
             raise HTTPException(status_code=401, detail="user not found")
-        tier = str(user_row["tier"] or token_row["tier"] or "free")
-        if tier not in LIMITS:
-            tier = "free"
+        tier = _normalize_tier_name(user_row["tier"] or token_row["tier"] or "free")
 
         expires_at = now + TOKEN_TTL_SECONDS
         new_token = await _mint_device_token_for_user(
@@ -2058,7 +2293,7 @@ async def user_get_profile(request: Request) -> Any:
         "email": user["email"],
         "name": user.get("name") or "",
         "avatar_url": user.get("avatar_url"),
-        "tier": user.get("tier") or "free",
+        "tier": _normalize_tier_name(user.get("tier")),
         "language": user.get("language") or "auto",
         "created_at": user.get("created_at"),
     }
@@ -2178,9 +2413,7 @@ async def user_get_plan(request: Request) -> Any:
             row = await cur.fetchone()
             usage_messages = int((row["cnt"] if row else 0) or 0)
 
-    tier = str(user.get("tier") or "free")
-    if tier not in LIMITS:
-        tier = "free"
+    tier = _normalize_tier_name(user.get("tier"))
 
     plans = [
         {
@@ -2206,8 +2439,8 @@ async def user_get_plan(request: Request) -> Any:
 @app.get("/v1/user/ai-config")
 async def user_get_ai_config(request: Request) -> Any:
     _, user = await _require_user(request)
-    ai_config = _safe_json_loads_object(user.get("ai_config"))
-    return {"ai_config": ai_config, "personas": list(PERSONA_PROMPTS.keys()) + ["custom"]}
+    ai_config = _normalize_ai_config(_safe_json_loads_object(user.get("ai_config")))
+    return {"ai_config": ai_config, "personas": list(SUPPORTED_PERSONAS)}
 
 
 @app.put("/v1/user/ai-config")
@@ -2224,11 +2457,11 @@ async def user_put_ai_config(request: Request) -> Any:
     custom_prompt = body.get("custom_prompt")
     temperature = body.get("temperature")
 
-    allowed_personas = set(PERSONA_PROMPTS.keys()) | {"custom"}
+    allowed_personas = set(SUPPORTED_PERSONAS)
     if persona is not None:
         if not isinstance(persona, str) or not persona.strip():
             raise HTTPException(status_code=400, detail="persona must be a string")
-        persona = persona.strip()
+        persona = _normalize_persona_name(persona, default="", allow_custom=True)
         if persona not in allowed_personas:
             raise HTTPException(status_code=400, detail="invalid persona")
 
@@ -2240,7 +2473,7 @@ async def user_put_ai_config(request: Request) -> Any:
     if temperature is not None and not isinstance(temperature, (int, float)):
         raise HTTPException(status_code=400, detail="temperature must be a number")
 
-    ai_config = _safe_json_loads_object(user.get("ai_config"))
+    ai_config = _normalize_ai_config(_safe_json_loads_object(user.get("ai_config")))
     if persona is not None:
         ai_config["persona"] = persona
     if custom_prompt is not None:
@@ -2261,7 +2494,7 @@ async def user_put_ai_config(request: Request) -> Any:
         )
         await db.commit()
 
-    return {"ai_config": ai_config, "personas": list(PERSONA_PROMPTS.keys()) + ["custom"]}
+    return {"ai_config": ai_config, "personas": list(SUPPORTED_PERSONAS)}
 
 
 @app.post("/v1/user/push-token")
@@ -2801,17 +3034,24 @@ async def get_conversation(conversation_id: str, request: Request) -> Any:
     }
 
 
-@app.post("/v1/conversations/{conversation_id}/upload")
-async def upload_conversation_file(
-    conversation_id: str,
+async def _handle_file_upload_request(
     request: Request,
-    file: UploadFile = File(...),
-) -> Any:
-    device_token = _require_device_token(request)
-    await _get_tier_for_token(device_token)
+    *,
+    device_token: str,
+    conversation_id: Optional[str],
+) -> Dict[str, Any]:
+    normalized_conversation_id = (conversation_id or "").strip()
+    if not normalized_conversation_id:
+        raise HTTPException(status_code=400, detail="conversation_id is required")
 
-    original_name = os.path.basename(str(file.filename or "upload.bin").strip() or "upload.bin")
-    file_bytes = await file.read()
+    content_type = request.headers.get("content-type", "")
+    raw_body = await request.body()
+    if not isinstance(raw_body, (bytes, bytearray)):
+        raise HTTPException(status_code=400, detail="invalid request body")
+    if len(raw_body) > (MAX_FILE_SIZE + 2 * 1024 * 1024):
+        raise HTTPException(status_code=413, detail=f"file too large (max {MAX_FILE_SIZE} bytes)")
+
+    original_name, file_bytes = _extract_file_field_from_multipart(content_type, bytes(raw_body))
     if not isinstance(file_bytes, (bytes, bytearray)):
         raise HTTPException(status_code=400, detail="invalid file payload")
     file_bytes = bytes(file_bytes)
@@ -2846,7 +3086,7 @@ async def upload_conversation_file(
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT id FROM conversations WHERE id=? AND device_token=?",
-            (conversation_id, device_token),
+            (normalized_conversation_id, device_token),
         ) as cur:
             conv = await cur.fetchone()
         if not conv:
@@ -2860,7 +3100,7 @@ async def upload_conversation_file(
             """,
             (
                 file_id,
-                conversation_id,
+                normalized_conversation_id,
                 original_name,
                 stored_path,
                 sha256_hash,
@@ -2872,15 +3112,40 @@ async def upload_conversation_file(
         )
         await db.commit()
 
-    response: Dict[str, Any] = {
+    return {
         "file_id": file_id,
-        "filename": original_name,
+        "url": f"/v1/files/{file_id}",
         "mime_type": mime_type,
         "size": len(file_bytes),
     }
-    if isinstance(extracted_text, str):
-        response["extracted_text"] = extracted_text
-    return response
+
+
+@app.post("/v1/upload")
+async def upload_file(
+    request: Request,
+    conversation_id: Optional[str] = None,
+) -> Any:
+    device_token = _require_device_token(request)
+    await _get_tier_for_token(device_token)
+    return await _handle_file_upload_request(
+        request,
+        device_token=device_token,
+        conversation_id=conversation_id,
+    )
+
+
+@app.post("/v1/conversations/{conversation_id}/upload")
+async def upload_conversation_file(
+    conversation_id: str,
+    request: Request,
+) -> Any:
+    device_token = _require_device_token(request)
+    await _get_tier_for_token(device_token)
+    return await _handle_file_upload_request(
+        request,
+        device_token=device_token,
+        conversation_id=conversation_id,
+    )
 
 
 @app.get("/v1/files/{file_id}")
@@ -2908,9 +3173,17 @@ async def get_uploaded_file(file_id: str, request: Request) -> Any:
             raise HTTPException(status_code=404, detail="file not found")
 
     path = str(row["stored_path"])
-    if not os.path.isfile(path):
+    real_path = os.path.realpath(path)
+    upload_dir = os.path.realpath(UPLOAD_DIR)
+    if not real_path.startswith(upload_dir + os.sep):
+        raise HTTPException(status_code=403, detail="access denied")
+    if not os.path.isfile(real_path):
         raise HTTPException(status_code=404, detail="file content missing")
-    return FileResponse(path=path, media_type=str(row["mime_type"]), filename=str(row["original_name"]))
+    return FileResponse(
+        path=real_path,
+        media_type=str(row["mime_type"]),
+        filename=str(row["original_name"]),
+    )
 
 
 @app.post("/v1/conversations/{conversation_id}/chat")
@@ -3485,10 +3758,17 @@ async def send_push(user_id: str, title: str, body: str) -> Dict[str, Any]:
     return {"total": len(results), "sent": sent, "failed": failed, "results": results}
 
 
+def _admin_key_matches(x_admin_key: Optional[str]) -> bool:
+    if not ADMIN_KEY:
+        return False
+    provided = x_admin_key or ""
+    return secrets.compare_digest(provided, ADMIN_KEY)
+
+
 def _admin_check(x_admin_key: Optional[str]) -> None:
     if not ADMIN_KEY:
         raise HTTPException(status_code=404, detail="admin disabled")
-    if not x_admin_key or not secrets.compare_digest(x_admin_key, ADMIN_KEY):
+    if not _admin_key_matches(x_admin_key):
         raise HTTPException(status_code=401, detail="bad admin key")
 
 
@@ -3504,7 +3784,7 @@ async def admin_generate_tokens(
         raise HTTPException(status_code=400, detail="request body must be valid JSON")
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="invalid json body")
-    tier = str(body.get("tier") or "free")
+    tier = _normalize_tier_name(body.get("tier"))
     count = int(body.get("count") or 1)
     if tier not in LIMITS:
         raise HTTPException(status_code=400, detail="invalid tier")
@@ -3539,7 +3819,7 @@ async def admin_set_tier(
         raise HTTPException(status_code=400, detail="request body must be valid JSON")
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="invalid json body")
-    tier = str(body.get("tier") or "")
+    tier = _normalize_tier_name(body.get("tier"), default="")
     if tier not in LIMITS:
         raise HTTPException(status_code=400, detail="invalid tier")
 
@@ -3643,7 +3923,7 @@ async def post_crash_report(request: Request) -> Any:
 async def get_crash_reports(request: Request, status: str = None, limit: int = 50) -> Any:
     """Admin: list crash reports. Requires ADMIN_KEY header."""
     admin = request.headers.get("x-admin-key") or request.headers.get("authorization", "").replace("Bearer ", "")
-    if admin != ADMIN_KEY:
+    if not _admin_key_matches((admin or "").strip()):
         raise HTTPException(status_code=403, detail="admin key required")
 
     async with aiosqlite.connect(TOKEN_DB_PATH) as db:
@@ -3668,7 +3948,7 @@ async def get_crash_reports(request: Request, status: str = None, limit: int = 5
 async def patch_crash_report(report_id: str, request: Request) -> Any:
     """Admin: update crash report status."""
     admin = request.headers.get("x-admin-key") or request.headers.get("authorization", "").replace("Bearer ", "")
-    if admin != ADMIN_KEY:
+    if not _admin_key_matches((admin or "").strip()):
         raise HTTPException(status_code=403, detail="admin key required")
 
     try:

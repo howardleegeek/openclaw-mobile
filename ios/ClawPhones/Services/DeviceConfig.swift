@@ -2,39 +2,33 @@
 //  DeviceConfig.swift
 //  ClawPhones
 //
-//  Device token management (MDM + Keychain fallback)
+//  Device token management (Keychain only for token persistence)
 //
 
 import Foundation
 
 class DeviceConfig {
     static let shared = DeviceConfig()
-    private init() {}
+    private init() {
+        migrateLegacyTokenIfNeeded()
+    }
 
     // Managed App Configuration (MDM) keys (also used for local overrides in dev builds)
     static let managedDeviceTokenKey = "ai.openclaw.device_token"
     static let managedTokenExpiresAtKey = "ai.openclaw.token_expires_at"
     static let managedBaseURLKey = "ai.openclaw.base_url"
     static let managedModeKey = "ai.openclaw.mode"
+    static let legacyAuthTokenKey = "auth_token"
 
     /// Get/set device token.
-    /// Priority (read): MDM → Keychain → nil
+    /// Priority (read): Keychain → nil
     /// Behavior (write): non-empty → Keychain, nil/empty → clear all stored tokens.
     var deviceToken: String? {
         get {
-            // 1. MDM Managed App Configuration (highest priority)
-            if let mdmToken = UserDefaults.standard.string(forKey: Self.managedDeviceTokenKey),
-               !mdmToken.isEmpty {
-                return mdmToken
-            }
-
-            // 2. Keychain (factory pre-installed)
             if let keychainToken = KeychainHelper.shared.readDeviceToken(),
                !keychainToken.isEmpty {
                 return keychainToken
             }
-
-            // 3. No token available
             return nil
         }
         set {
@@ -51,11 +45,12 @@ class DeviceConfig {
     var baseURL: String {
         // Allow MDM override (for testing/staging)
         if let mdmURL = UserDefaults.standard.string(forKey: Self.managedBaseURLKey),
-           !mdmURL.isEmpty {
+           !mdmURL.isEmpty,
+           mdmURL.lowercased().hasPrefix("https://") {
             return mdmURL
         }
 
-        return "http://3.142.69.6:8080"
+        return "https://3.142.69.6:8080"
     }
 
     /// Device mode/tier
@@ -87,15 +82,12 @@ class DeviceConfig {
 
     /// Save user-authenticated token (fallback for non-Oyster devices)
     func saveUserToken(_ token: String, expiresAt: Int? = nil) {
-        // Write to BOTH UserDefaults (highest priority in getter) AND Keychain.
-        // This ensures the getter always returns the freshest token.
-        UserDefaults.standard.set(token, forKey: Self.managedDeviceTokenKey)
+        _ = KeychainHelper.shared.writeDeviceToken(token)
         if let expiresAt, expiresAt > 0 {
             UserDefaults.standard.set(expiresAt, forKey: Self.managedTokenExpiresAtKey)
         } else {
             UserDefaults.standard.removeObject(forKey: Self.managedTokenExpiresAtKey)
         }
-        _ = KeychainHelper.shared.writeDeviceToken(token)
     }
 
     var tokenExpiresAt: Int? {
@@ -123,6 +115,24 @@ class DeviceConfig {
     func clearTokens() {
         KeychainHelper.shared.clearAll()
         UserDefaults.standard.removeObject(forKey: Self.managedDeviceTokenKey)
+        UserDefaults.standard.removeObject(forKey: Self.legacyAuthTokenKey)
         UserDefaults.standard.removeObject(forKey: Self.managedTokenExpiresAtKey)
+    }
+
+    private func migrateLegacyTokenIfNeeded() {
+        let defaults = UserDefaults.standard
+        let keychainToken = KeychainHelper.shared.readDeviceToken()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        var legacyToken = defaults.string(forKey: Self.managedDeviceTokenKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if legacyToken?.isEmpty ?? true {
+            legacyToken = defaults.string(forKey: Self.legacyAuthTokenKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if keychainToken.isEmpty, let token = legacyToken, !token.isEmpty {
+            _ = KeychainHelper.shared.writeDeviceToken(token)
+        }
+
+        defaults.removeObject(forKey: Self.managedDeviceTokenKey)
+        defaults.removeObject(forKey: Self.legacyAuthTokenKey)
     }
 }
