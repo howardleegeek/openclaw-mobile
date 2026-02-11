@@ -1,24 +1,30 @@
 package ai.clawphones.agent.chat;
 
 import android.Manifest;
+import android.app.Activity;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.content.ContentResolver;
 import android.content.BroadcastReceiver;
 import android.content.ComponentCallbacks2;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.text.Html;
 import android.text.Spannable;
 import android.text.Spanned;
@@ -46,6 +52,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -56,11 +63,14 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -87,6 +97,8 @@ public class ChatActivity extends AppCompatActivity {
     private RecyclerView mRecycler;
     private EditText mInput;
     private TextView mSpeechStatus;
+    private TextView mAttachmentPreview;
+    private ImageButton mAttach;
     private ImageButton mSend;
     private ImageButton mMic;
     private View mMicPulse;
@@ -108,12 +120,26 @@ public class ChatActivity extends AppCompatActivity {
     private static final long SPEECH_DONE_RESET_MS = 1_200L;
     private static final int MAX_QUEUE_RETRY = 3;
     private static final int REQUEST_RECORD_AUDIO = 7021;
+    private static final int REQUEST_CAMERA_PERMISSION = 7022;
+    private static final int REQUEST_PICK_IMAGE = 7101;
+    private static final int REQUEST_CAPTURE_IMAGE = 7102;
+    private static final int REQUEST_PICK_FILE = 7103;
     private static final int MESSAGE_PAGE_SIZE = 80;
     private static final int PAGINATION_PREFETCH_TRIGGER = 6;
+    private static final int MAX_PENDING_ATTACHMENTS = 3;
+    private static final int MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+    private static final int MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+    private static final int IMAGE_MAX_WIDTH = 1024;
+    private static final int IMAGE_QUALITY = 80;
+    private static final List<String> ALLOWED_FILE_MIME_TYPES = Arrays.asList(
+        "application/pdf", "text/plain", "text/csv", "application/json", "text/markdown"
+    );
 
     private final ArrayList<ChatMessage> mAllHistoryMessages = new ArrayList<>();
+    private final ArrayList<PendingAttachment> mPendingAttachments = new ArrayList<>();
     private int mNextHistoryLoadStart = 0;
     private boolean mLoadingOlderHistory = false;
+    @Nullable private Uri mPendingCameraUri;
 
     private enum SpeechUiState {
         IDLE,
@@ -165,8 +191,10 @@ public class ChatActivity extends AppCompatActivity {
         mRecycler = findViewById(R.id.messages_recycler);
         mInput = findViewById(R.id.message_input);
         mSpeechStatus = findViewById(R.id.speech_status);
+        mAttachmentPreview = findViewById(R.id.attachment_preview);
         mMic = findViewById(R.id.message_mic);
         mMicPulse = findViewById(R.id.message_mic_pulse);
+        mAttach = findViewById(R.id.message_attach);
         mSend = findViewById(R.id.message_send);
         mSendProgress = findViewById(R.id.message_send_progress);
 
@@ -200,6 +228,9 @@ public class ChatActivity extends AppCompatActivity {
         }
 
         mSend.setOnClickListener(v -> onSend());
+        if (mAttach != null) {
+            mAttach.setOnClickListener(v -> showAttachmentPicker());
+        }
         initSpeechInput();
 
         mInput.setOnEditorActionListener((v, actionId, event) -> {
@@ -269,17 +300,28 @@ public class ChatActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != REQUEST_RECORD_AUDIO) return;
+        if (requestCode == REQUEST_RECORD_AUDIO) {
+            boolean granted = grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            if (granted) {
+                setSpeechUiState(SpeechUiState.IDLE, null);
+                toast(getString(R.string.chat_speech_permission_granted));
+            } else {
+                setSpeechUiState(SpeechUiState.IDLE, null);
+                setSpeechStatus(getString(R.string.chat_speech_need_permission), false);
+                toast(getString(R.string.chat_speech_need_permission));
+            }
+            return;
+        }
 
-        boolean granted = grantResults.length > 0
-            && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-        if (granted) {
-            setSpeechUiState(SpeechUiState.IDLE, null);
-            toast(getString(R.string.chat_speech_permission_granted));
-        } else {
-            setSpeechUiState(SpeechUiState.IDLE, null);
-            setSpeechStatus(getString(R.string.chat_speech_need_permission), false);
-            toast(getString(R.string.chat_speech_need_permission));
+        if (requestCode == REQUEST_CAMERA_PERMISSION) {
+            boolean granted = grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            if (granted) {
+                openCameraPicker();
+            } else {
+                toast("Camera permission denied");
+            }
         }
     }
 
@@ -300,6 +342,337 @@ public class ChatActivity extends AppCompatActivity {
             } catch (java.util.concurrent.RejectedExecutionException ignored) {
             }
         }
+    }
+
+    private void showAttachmentPicker() {
+        if (mBusy) return;
+        if (mPendingAttachments.size() >= MAX_PENDING_ATTACHMENTS) {
+            toast("最多可添加 3 个附件");
+            return;
+        }
+        String[] options = new String[]{"拍照", "相册", "文件"};
+        new AlertDialog.Builder(this)
+            .setTitle("添加附件")
+            .setItems(options, (dialog, which) -> {
+                if (which == 0) {
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                        != PackageManager.PERMISSION_GRANTED) {
+                        ActivityCompat.requestPermissions(
+                            this,
+                            new String[]{Manifest.permission.CAMERA},
+                            REQUEST_CAMERA_PERMISSION
+                        );
+                        return;
+                    }
+                    openCameraPicker();
+                } else if (which == 1) {
+                    openImagePicker();
+                } else if (which == 2) {
+                    openFilePicker();
+                }
+            })
+            .show();
+    }
+
+    private void openImagePicker() {
+        Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        intent.setType("image/*");
+        startActivityForResult(intent, REQUEST_PICK_IMAGE);
+    }
+
+    private void openCameraPicker() {
+        try {
+            File exportDir = new File(getFilesDir(), "exports");
+            if (!exportDir.exists() && !exportDir.mkdirs()) {
+                toast("无法创建相机临时目录");
+                return;
+            }
+            File output = File.createTempFile("chat_capture_", ".jpg", exportDir);
+            mPendingCameraUri = FileProvider.getUriForFile(
+                this,
+                getPackageName() + ".export.fileprovider",
+                output
+            );
+            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, mPendingCameraUri);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            startActivityForResult(intent, REQUEST_CAPTURE_IMAGE);
+        } catch (Exception e) {
+            CrashReporter.reportNonFatal(this, e, "opening_camera_picker");
+            toast("打开相机失败");
+        }
+    }
+
+    private void openFilePicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(
+            Intent.EXTRA_MIME_TYPES,
+            new String[]{
+                "application/pdf",
+                "text/plain",
+                "text/csv",
+                "application/json",
+                "text/markdown",
+                "image/*"
+            }
+        );
+        startActivityForResult(intent, REQUEST_PICK_FILE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != Activity.RESULT_OK) return;
+
+        if (requestCode == REQUEST_PICK_IMAGE) {
+            handlePickedAttachment(data == null ? null : data.getData(), true);
+            return;
+        }
+        if (requestCode == REQUEST_CAPTURE_IMAGE) {
+            handlePickedAttachment(mPendingCameraUri, true);
+            mPendingCameraUri = null;
+            return;
+        }
+        if (requestCode == REQUEST_PICK_FILE) {
+            handlePickedAttachment(data == null ? null : data.getData(), false);
+        }
+    }
+
+    private void handlePickedAttachment(@Nullable Uri uri, boolean forceImage) {
+        if (uri == null) {
+            toast("未选中文件");
+            return;
+        }
+        if (mPendingAttachments.size() >= MAX_PENDING_ATTACHMENTS) {
+            toast("最多可添加 3 个附件");
+            return;
+        }
+
+        try {
+            String filename = resolveDisplayName(uri);
+            String mimeType = resolveMimeType(uri, filename, forceImage);
+            byte[] data;
+
+            if (mimeType.startsWith("image/") || forceImage) {
+                data = compressImage(uri);
+                mimeType = "image/jpeg";
+                if (!filename.toLowerCase(Locale.US).endsWith(".jpg")
+                    && !filename.toLowerCase(Locale.US).endsWith(".jpeg")) {
+                    filename = filename + ".jpg";
+                }
+            } else {
+                try (InputStream is = getContentResolver().openInputStream(uri)) {
+                    if (is == null) {
+                        toast("读取文件失败");
+                        return;
+                    }
+                    data = readAllBytes(is);
+                }
+            }
+
+            int maxBytes = mimeType.startsWith("image/") ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES;
+            if (data.length > maxBytes) {
+                toast("文件过大");
+                return;
+            }
+
+            if (!mimeType.startsWith("image/") && !ALLOWED_FILE_MIME_TYPES.contains(mimeType)) {
+                toast("不支持的文件类型");
+                return;
+            }
+
+            mPendingAttachments.add(new PendingAttachment(data, filename, mimeType));
+            refreshAttachmentPreview();
+        } catch (Exception e) {
+            CrashReporter.reportNonFatal(this, e, "handling_attachment");
+            toast("附件处理失败");
+        }
+    }
+
+    private void uploadAttachmentsThenSend(@NonNull String text, @NonNull List<PendingAttachment> attachments) {
+        if (attachments.isEmpty()) {
+            int userIndex = addUserMessage(text);
+            sendMessageOnline(mConversationId, text, null, null, userIndex);
+            return;
+        }
+        if (TextUtils.isEmpty(mConversationId)) {
+            createConversation(() -> uploadAttachmentsThenSend(text, attachments));
+            return;
+        }
+
+        final String targetConversationId = mConversationId;
+        mBusy = true;
+        setInputEnabled(false);
+        setSendingState(true);
+
+        execSafe(() -> {
+            ArrayList<String> fileIds = new ArrayList<>();
+            ArrayList<ClawPhonesAPI.UploadedFile> uploadedFiles = new ArrayList<>();
+            try {
+                for (PendingAttachment attachment : attachments) {
+                    ClawPhonesAPI.UploadedFile uploaded = ClawPhonesAPI.uploadFileBlocking(
+                        ChatActivity.this,
+                        targetConversationId,
+                        attachment.data,
+                        attachment.filename,
+                        attachment.mimeType
+                    );
+                    if (uploaded == null || TextUtils.isEmpty(uploaded.fileId)) {
+                        throw new IOException("upload returned empty file_id");
+                    }
+                    uploadedFiles.add(uploaded);
+                    fileIds.add(uploaded.fileId);
+                }
+            } catch (Exception e) {
+                CrashReporter.reportNonFatal(ChatActivity.this, e, "uploading_attachments");
+                runSafe(() -> {
+                    mPendingAttachments.addAll(attachments);
+                    refreshAttachmentPreview();
+                    mBusy = false;
+                    setInputEnabled(true);
+                    setSendingState(false);
+                    toast("附件上传失败，请重试");
+                });
+                return;
+            }
+
+            final String localDisplay = buildAttachmentSummaryText(text, uploadedFiles);
+            final String firstImageUrl = firstImageUrl(uploadedFiles);
+            runSafe(() -> {
+                mBusy = false;
+                setInputEnabled(true);
+                setSendingState(false);
+                int userIndex = addUserMessage(localDisplay, firstImageUrl);
+                sendMessageOnline(targetConversationId, text, fileIds, null, userIndex);
+            });
+        });
+    }
+
+    private void refreshAttachmentPreview() {
+        if (mAttachmentPreview == null) return;
+        if (mPendingAttachments.isEmpty()) {
+            mAttachmentPreview.setText("");
+            mAttachmentPreview.setVisibility(View.GONE);
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < mPendingAttachments.size(); i++) {
+            PendingAttachment item = mPendingAttachments.get(i);
+            String icon = item.mimeType.startsWith("image/") ? "🖼 " : "📄 ";
+            if (sb.length() > 0) sb.append("  ·  ");
+            sb.append(icon).append(item.filename).append(" (").append(formatBytes(item.data.length)).append(")");
+        }
+        mAttachmentPreview.setText(sb.toString());
+        mAttachmentPreview.setVisibility(View.VISIBLE);
+    }
+
+    private static String buildAttachmentSummaryText(@NonNull String text, @NonNull List<ClawPhonesAPI.UploadedFile> uploadedFiles) {
+        StringBuilder sb = new StringBuilder();
+        for (ClawPhonesAPI.UploadedFile uploaded : uploadedFiles) {
+            if (uploaded == null) continue;
+            String icon = uploaded.mimeType.startsWith("image/") ? "🖼 " : "📄 ";
+            if (sb.length() > 0) sb.append("\n");
+            sb.append(icon)
+                .append(uploaded.filename)
+                .append(" (")
+                .append(formatBytes(uploaded.size))
+                .append(")");
+        }
+        String trimmedText = safeTrim(text);
+        if (!trimmedText.isEmpty()) {
+            if (sb.length() > 0) sb.append("\n\n");
+            sb.append(trimmedText);
+        }
+        return sb.toString();
+    }
+
+    @Nullable
+    private static String firstImageUrl(@NonNull List<ClawPhonesAPI.UploadedFile> uploadedFiles) {
+        for (ClawPhonesAPI.UploadedFile uploaded : uploadedFiles) {
+            if (uploaded == null) continue;
+            if (TextUtils.isEmpty(uploaded.fileId)) continue;
+            if (!uploaded.mimeType.startsWith("image/")) continue;
+            return ClawPhonesAPI.BASE_URL + "/v1/files/" + uploaded.fileId;
+        }
+        return null;
+    }
+
+    private byte[] compressImage(@NonNull Uri uri) throws IOException {
+        ContentResolver resolver = getContentResolver();
+        try (InputStream is = resolver.openInputStream(uri)) {
+            if (is == null) throw new IOException("cannot open image");
+            Bitmap original = BitmapFactory.decodeStream(is);
+            if (original == null) throw new IOException("decode image failed");
+
+            int width = original.getWidth();
+            int height = original.getHeight();
+            Bitmap scaled = original;
+            if (width > IMAGE_MAX_WIDTH) {
+                int scaledHeight = Math.max(1, (int) ((height * 1f * IMAGE_MAX_WIDTH) / Math.max(1, width)));
+                scaled = Bitmap.createScaledBitmap(original, IMAGE_MAX_WIDTH, scaledHeight, true);
+            }
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            scaled.compress(Bitmap.CompressFormat.JPEG, IMAGE_QUALITY, baos);
+            byte[] out = baos.toByteArray();
+
+            if (scaled != original) {
+                scaled.recycle();
+            }
+            original.recycle();
+            return out;
+        }
+    }
+
+    private static byte[] readAllBytes(@NonNull InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            output.write(buffer, 0, read);
+        }
+        return output.toByteArray();
+    }
+
+    @NonNull
+    private String resolveDisplayName(@NonNull Uri uri) {
+        String fallback = "file_" + System.currentTimeMillis();
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (index >= 0) {
+                    String name = safeTrim(cursor.getString(index));
+                    if (!name.isEmpty()) return name;
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return fallback;
+    }
+
+    @NonNull
+    private String resolveMimeType(@NonNull Uri uri, @NonNull String filename, boolean forceImage) {
+        if (forceImage) return "image/jpeg";
+        String mimeType = safeTrim(getContentResolver().getType(uri));
+        if (!mimeType.isEmpty()) return mimeType;
+        String guessed = URLConnection.guessContentTypeFromName(filename);
+        if (guessed != null && !guessed.trim().isEmpty()) return guessed.trim();
+        return "application/octet-stream";
+    }
+
+    @NonNull
+    private static String formatBytes(long sizeBytes) {
+        if (sizeBytes <= 0) return "0 B";
+        if (sizeBytes < 1024) return sizeBytes + " B";
+        if (sizeBytes < 1024 * 1024) return String.format(Locale.US, "%.1f KB", sizeBytes / 1024.0);
+        return String.format(Locale.US, "%.1f MB", sizeBytes / (1024.0 * 1024.0));
     }
 
     private void loadHistory(String conversationId) {
@@ -557,24 +930,45 @@ public class ChatActivity extends AppCompatActivity {
         CrashReporter.setLastAction("sending_message");
 
         String text = safeTrim(mInput.getText().toString());
-        if (TextUtils.isEmpty(text)) return;
+        boolean hasPendingAttachments = !mPendingAttachments.isEmpty();
+        if (TextUtils.isEmpty(text) && !hasPendingAttachments) return;
 
-        mLastUserText = text;
+        if (hasPendingAttachments && !isNetworkConnected()) {
+            toast(getString(R.string.chat_error_connect_failed, "attachments require network"));
+            return;
+        }
+
+        final String textToSend = text;
+        final ArrayList<PendingAttachment> attachmentsToSend = new ArrayList<>(mPendingAttachments);
+
+        mLastUserText = textToSend;
         mInput.setText("");
 
         Map<String, Object> analyticsProps = new HashMap<>();
         analyticsProps.put("conversation_id", TextUtils.isEmpty(mConversationId) ? "" : mConversationId);
-        analyticsProps.put("message_length", text.length());
+        analyticsProps.put("message_length", textToSend.length());
         analyticsProps.put("queued", !canSendImmediately());
+        analyticsProps.put("attachment_count", attachmentsToSend.size());
         AnalyticsManager.getInstance(getApplicationContext()).track("message_sent", analyticsProps);
 
-        if (canSendImmediately()) {
-            int userIndex = addUserMessage(text);
-            sendMessageOnline(mConversationId, text, null, null, userIndex);
+        if (!attachmentsToSend.isEmpty()) {
+            mPendingAttachments.clear();
+            refreshAttachmentPreview();
+            if (TextUtils.isEmpty(mConversationId)) {
+                createConversation(() -> uploadAttachmentsThenSend(textToSend, attachmentsToSend));
+            } else {
+                uploadAttachmentsThenSend(textToSend, attachmentsToSend);
+            }
             return;
         }
 
-        queueMessageForLater(text, mConversationId);
+        if (canSendImmediately()) {
+            int userIndex = addUserMessage(textToSend);
+            sendMessageOnline(mConversationId, textToSend, null, null, userIndex);
+            return;
+        }
+
+        queueMessageForLater(textToSend, mConversationId);
         if (isNetworkConnected()) {
             if (TextUtils.isEmpty(mConversationId)) {
                 createConversation();
@@ -591,10 +985,20 @@ public class ChatActivity extends AppCompatActivity {
     private void sendMessageOnline(
         @Nullable String conversationId,
         @NonNull String text,
-        @Nullable String imageUrl,
+        @Nullable List<String> fileIds,
         @Nullable Long queueId,
         @Nullable Integer userIndex
     ) {
+        final ArrayList<String> normalizedFileIds = new ArrayList<>();
+        if (fileIds != null) {
+            for (String fileId : fileIds) {
+                if (fileId == null) continue;
+                String normalized = fileId.trim();
+                if (!normalized.isEmpty()) normalizedFileIds.add(normalized);
+            }
+        }
+        final boolean hasFileIds = !normalizedFileIds.isEmpty();
+
         if (TextUtils.isEmpty(conversationId)) {
             if (queueId != null) {
                 if (mMessageQueue != null) mMessageQueue.markPending(queueId);
@@ -605,9 +1009,15 @@ public class ChatActivity extends AppCompatActivity {
                 return;
             }
 
-            if (!TextUtils.isEmpty(imageUrl)) {
+            if (hasFileIds) {
                 if (isNetworkConnected() && TextUtils.isEmpty(mConversationId)) {
-                    createConversation(() -> sendMessageOnline(mConversationId, text, imageUrl, null, userIndex));
+                    createConversation(() -> sendMessageOnline(
+                        mConversationId,
+                        text,
+                        new ArrayList<>(normalizedFileIds),
+                        null,
+                        userIndex
+                    ));
                     return;
                 }
                 toast(getString(R.string.chat_image_send_failed));
@@ -644,7 +1054,7 @@ public class ChatActivity extends AppCompatActivity {
                 ChatActivity.this,
                 targetConversationId,
                 text,
-                imageUrl,
+                normalizedFileIds,
                 new ClawPhonesAPI.StreamCallback() {
                     @Override
                     public void onDelta(String delta) {
@@ -690,7 +1100,7 @@ public class ChatActivity extends AppCompatActivity {
                                 return;
                             }
 
-                            if (isLikelyOffline(error) && TextUtils.isEmpty(imageUrl)) {
+                            if (isLikelyOffline(error) && !hasFileIds) {
                                 removeMessageAt(assistantIndex);
                                 if (userIndex != null) {
                                     queueExistingUserMessage(userIndex, text, targetConversationId);
@@ -964,6 +1374,10 @@ public class ChatActivity extends AppCompatActivity {
             mSend.setEnabled(enabled);
             mSend.setAlpha(enabled ? 1.0f : 0.5f);
         }
+        if (mAttach != null) {
+            mAttach.setEnabled(enabled);
+            mAttach.setAlpha(enabled ? 1.0f : 0.5f);
+        }
         if (!enabled && mSpeechHelper != null) {
             mSpeechHelper.cancelListening();
             setSpeechUiState(SpeechUiState.IDLE, null);
@@ -1200,14 +1614,25 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private int addUserMessage(String text) {
-        return addUserMessage(text, -1L, ChatMessage.DeliveryState.NONE, 0);
+        return addUserMessage(text, null, -1L, ChatMessage.DeliveryState.NONE, 0);
+    }
+
+    private int addUserMessage(String text, @Nullable String imageUrl) {
+        return addUserMessage(text, imageUrl, -1L, ChatMessage.DeliveryState.NONE, 0);
     }
 
     private int addUserMessage(String text, long queueId,
                                @NonNull ChatMessage.DeliveryState deliveryState,
                                int retryCount) {
+        return addUserMessage(text, null, queueId, deliveryState, retryCount);
+    }
+
+    private int addUserMessage(String text, @Nullable String imageUrl,
+                               long queueId,
+                               @NonNull ChatMessage.DeliveryState deliveryState,
+                               int retryCount) {
         int idx = mMessages.size();
-        ChatMessage message = new ChatMessage(ChatMessage.Role.USER, text, false);
+        ChatMessage message = new ChatMessage(ChatMessage.Role.USER, text, false, imageUrl);
         message.queueId = queueId;
         message.deliveryState = deliveryState;
         message.retryCount = Math.max(0, retryCount);
@@ -1332,6 +1757,8 @@ public class ChatActivity extends AppCompatActivity {
 
     private static final Pattern MARKDOWN_IMAGE_PATTERN =
         Pattern.compile("!\\[[^\\]]*\\]\\((https?://[^\\s)]+)\\)");
+    private static final String MESSAGE_META_OPEN = "[[MESSAGE_META]]";
+    private static final String MESSAGE_META_CLOSE = "[[/MESSAGE_META]]";
 
     @NonNull
     private static ParsedVisionContent parseVisionContent(@Nullable String raw) {
@@ -1340,19 +1767,35 @@ public class ChatActivity extends AppCompatActivity {
             return new ParsedVisionContent("", null);
         }
 
+        MessageMetaSplit metaSplit = splitMessageMeta(trimmed);
+        String visibleBody = safeTrim(metaSplit.body);
+        String fileSummary = extractFileSummary(metaSplit.meta);
+        String imageFromMeta = extractFirstImageUrl(metaSplit.meta);
+
         StringBuilder text = new StringBuilder();
         String[] imageUrl = new String[1];
 
-        if (looksLikeJson(trimmed)) {
+        if (!TextUtils.isEmpty(imageFromMeta)) {
+            imageUrl[0] = imageFromMeta;
+        }
+
+        if (looksLikeJson(visibleBody)) {
             try {
-                Object parsed = new org.json.JSONTokener(trimmed).nextValue();
+                Object parsed = new org.json.JSONTokener(visibleBody).nextValue();
                 extractVisionFromObject(parsed, text, imageUrl);
             } catch (Exception ignored) {
             }
         }
 
         if (text.length() == 0) {
-            text.append(trimmed);
+            text.append(visibleBody);
+        }
+        if (!TextUtils.isEmpty(fileSummary)) {
+            if (text.length() > 0) {
+                text.insert(0, fileSummary + "\n\n");
+            } else {
+                text.append(fileSummary);
+            }
         }
         if (TextUtils.isEmpty(imageUrl[0])) {
             imageUrl[0] = extractMarkdownImageUrl(text.toString());
@@ -1468,6 +1911,85 @@ public class ChatActivity extends AppCompatActivity {
         return normalized;
     }
 
+    @NonNull
+    private static MessageMetaSplit splitMessageMeta(@NonNull String raw) {
+        if (!raw.startsWith(MESSAGE_META_OPEN)) {
+            return new MessageMetaSplit(raw, null);
+        }
+        int endIndex = raw.indexOf(MESSAGE_META_CLOSE, MESSAGE_META_OPEN.length());
+        if (endIndex <= MESSAGE_META_OPEN.length()) {
+            return new MessageMetaSplit(raw, null);
+        }
+
+        String metaJson = raw.substring(MESSAGE_META_OPEN.length(), endIndex);
+        String body = raw.substring(endIndex + MESSAGE_META_CLOSE.length());
+        try {
+            JSONObject meta = new JSONObject(metaJson);
+            return new MessageMetaSplit(body, meta);
+        } catch (Exception ignored) {
+            return new MessageMetaSplit(body, null);
+        }
+    }
+
+    @NonNull
+    private static String extractFileSummary(@Nullable JSONObject meta) {
+        if (meta == null) return "";
+        JSONArray files = meta.optJSONArray("files");
+        if (files == null || files.length() == 0) return "";
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < files.length(); i++) {
+            JSONObject file = files.optJSONObject(i);
+            if (file == null) continue;
+            String name = safeTrim(file.optString("name", "file"));
+            if (name.isEmpty()) name = "file";
+            String mime = safeTrim(file.optString("type", ""));
+            long size = file.optLong("size", 0L);
+            String icon = mime.startsWith("image/") ? "🖼 " : "📄 ";
+            if (sb.length() > 0) sb.append("\n");
+            sb.append(icon).append(name);
+            if (size > 0) {
+                sb.append(" (").append(formatBytes(size)).append(")");
+            }
+        }
+        return sb.toString();
+    }
+
+    @Nullable
+    private static String extractFirstImageUrl(@Nullable JSONObject meta) {
+        if (meta == null) return null;
+        JSONArray files = meta.optJSONArray("files");
+        if (files == null) return null;
+        for (int i = 0; i < files.length(); i++) {
+            JSONObject file = files.optJSONObject(i);
+            if (file == null) continue;
+            String mime = safeTrim(file.optString("type", ""));
+            if (!mime.startsWith("image/")) continue;
+            String url = safeTrim(file.optString("url", ""));
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                return url;
+            }
+            if (url.startsWith("/")) {
+                return ClawPhonesAPI.BASE_URL + url;
+            }
+            String fileId = safeTrim(file.optString("id", ""));
+            if (!fileId.isEmpty()) {
+                return ClawPhonesAPI.BASE_URL + "/v1/files/" + fileId;
+            }
+        }
+        return null;
+    }
+
+    static final class MessageMetaSplit {
+        final String body;
+        @Nullable final JSONObject meta;
+
+        MessageMetaSplit(@Nullable String body, @Nullable JSONObject meta) {
+            this.body = body == null ? "" : body;
+            this.meta = meta;
+        }
+    }
+
     static final class ParsedVisionContent {
         final String text;
         @Nullable final String imageUrl;
@@ -1475,6 +1997,18 @@ public class ChatActivity extends AppCompatActivity {
         ParsedVisionContent(@Nullable String text, @Nullable String imageUrl) {
             this.text = text == null ? "" : text;
             this.imageUrl = TextUtils.isEmpty(safeTrim(imageUrl)) ? null : safeTrim(imageUrl);
+        }
+    }
+
+    static final class PendingAttachment {
+        final byte[] data;
+        final String filename;
+        final String mimeType;
+
+        PendingAttachment(@NonNull byte[] data, @NonNull String filename, @NonNull String mimeType) {
+            this.data = data;
+            this.filename = filename;
+            this.mimeType = mimeType;
         }
     }
 
@@ -1594,7 +2128,11 @@ public class ChatActivity extends AppCompatActivity {
                 if (image != null) {
                     if (!TextUtils.isEmpty(message.imageUrl)) {
                         image.setVisibility(View.VISIBLE);
-                        IMAGE_LOADER.loadInto(image, message.imageUrl);
+                        IMAGE_LOADER.loadInto(
+                            image,
+                            message.imageUrl,
+                            ClawPhonesAPI.getToken(itemView.getContext())
+                        );
                     } else {
                         IMAGE_LOADER.cancel(image);
                         image.setImageDrawable(null);
@@ -1688,7 +2226,7 @@ public class ChatActivity extends AppCompatActivity {
             private final ExecutorService decodeExecutor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
             private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
-            void loadInto(@NonNull ImageView target, @Nullable String rawUrl) {
+            void loadInto(@NonNull ImageView target, @Nullable String rawUrl, @Nullable String authToken) {
                 String imageUrl = safeTrim(rawUrl);
                 if (imageUrl.isEmpty()) {
                     cancel(target);
@@ -1707,7 +2245,12 @@ public class ChatActivity extends AppCompatActivity {
 
                 target.setImageDrawable(null);
                 decodeExecutor.execute(() -> {
-                    Bitmap decoded = decodeFromNetwork(imageUrl, DEFAULT_THUMB_SIZE_PX, DEFAULT_THUMB_SIZE_PX);
+                    Bitmap decoded = decodeFromNetwork(
+                        imageUrl,
+                        DEFAULT_THUMB_SIZE_PX,
+                        DEFAULT_THUMB_SIZE_PX,
+                        authToken
+                    );
                     if (decoded == null) return;
                     bitmapCache.put(cacheKey, decoded);
 
@@ -1743,7 +2286,12 @@ public class ChatActivity extends AppCompatActivity {
             }
 
             @Nullable
-            private Bitmap decodeFromNetwork(@NonNull String url, int reqWidth, int reqHeight) {
+            private Bitmap decodeFromNetwork(
+                @NonNull String url,
+                int reqWidth,
+                int reqHeight,
+                @Nullable String authToken
+            ) {
                 HttpURLConnection conn = null;
                 try {
                     conn = (HttpURLConnection) new URL(url).openConnection();
@@ -1751,6 +2299,11 @@ public class ChatActivity extends AppCompatActivity {
                     conn.setReadTimeout(10_000);
                     conn.setDoInput(true);
                     conn.setRequestProperty("Accept", "image/*");
+                    if (url.startsWith(ClawPhonesAPI.BASE_URL + "/v1/files/")
+                        && authToken != null
+                        && !authToken.trim().isEmpty()) {
+                        conn.setRequestProperty("Authorization", "Bearer " + authToken.trim());
+                    }
 
                     int code = conn.getResponseCode();
                     if (code < 200 || code >= 300) return null;

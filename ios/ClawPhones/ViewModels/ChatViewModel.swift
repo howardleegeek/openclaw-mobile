@@ -13,6 +13,7 @@ final class ChatViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var conversationTitle: String?
+    @Published var pendingFiles: [PendingFile] = []
     @Published private(set) var isOnline: Bool = true
 
     private(set) var conversationId: String?
@@ -27,6 +28,19 @@ final class ChatViewModel: ObservableObject {
     private var memoryWarningObserver: NSObjectProtocol?
 
     private let messagePageSize = 80
+    private let maxPendingFiles = 3
+    private let maxImageBytes = 10 * 1024 * 1024
+    private let maxFileBytes = 20 * 1024 * 1024
+
+    struct PendingFile: Identifiable, Hashable {
+        let id: String
+        let data: Data
+        let filename: String
+        let mimeType: String
+        let thumbnail: UIImage?
+
+        var size: Int { data.count }
+    }
 
     static let defaultSystemPrompt = """
     你是 ClawPhones AI 助手，由 Oyster Labs 开发。你聪明、友好、高效。
@@ -137,9 +151,44 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func addPendingFile(data: Data, filename: String, mimeType: String, thumbnail: UIImage?) {
+        guard pendingFiles.count < maxPendingFiles else {
+            errorMessage = "最多只能添加 3 个附件"
+            return
+        }
+
+        let isImage = mimeType.hasPrefix("image/")
+        let maxBytes = isImage ? maxImageBytes : maxFileBytes
+        guard data.count <= maxBytes else {
+            errorMessage = "文件过大，请压缩后重试"
+            return
+        }
+
+        let safeName = filename.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedName = safeName.isEmpty ? "upload.bin" : safeName
+        let normalizedMime = mimeType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "application/octet-stream"
+            : mimeType
+
+        pendingFiles.append(
+            PendingFile(
+                id: UUID().uuidString,
+                data: data,
+                filename: normalizedName,
+                mimeType: normalizedMime,
+                thumbnail: thumbnail
+            )
+        )
+    }
+
+    func removePendingFile(id: String) {
+        pendingFiles.removeAll { $0.id == id }
+    }
+
     func sendMessage(text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let filesToSend = pendingFiles
+        guard !trimmed.isEmpty || !filesToSend.isEmpty else { return }
         guard !isLoading else { return }
 
         errorMessage = nil
@@ -148,11 +197,16 @@ final class ChatViewModel: ObservableObject {
             properties: [
                 "conversation_id": conversationId ?? "",
                 "message_length": trimmed.count,
-                "queued": !isOnline
+                "queued": !isOnline,
+                "attachment_count": filesToSend.count
             ]
         )
 
         if !isOnline {
+            if !filesToSend.isEmpty {
+                errorMessage = "附件上传需要网络连接"
+                return
+            }
             queueMessageForLater(trimmed)
             return
         }
@@ -166,8 +220,21 @@ final class ChatViewModel: ObservableObject {
             return
         }
 
+        var uploadedFileIds: [String] = []
+        if !filesToSend.isEmpty {
+            for file in filesToSend {
+                guard let fileId = await uploadFile(data: file.data, filename: file.filename, mimeType: file.mimeType) else {
+                    pendingFiles = filesToSend
+                    return
+                }
+                uploadedFileIds.append(fileId)
+            }
+            pendingFiles.removeAll(keepingCapacity: false)
+        }
+
         let now = Int(Date().timeIntervalSince1970)
-        let userMessage = Message(id: UUID().uuidString, role: .user, content: trimmed, createdAt: now)
+        let localDisplayContent = buildLocalUserContent(text: trimmed, files: filesToSend)
+        let userMessage = Message(id: UUID().uuidString, role: .user, content: localDisplayContent, createdAt: now)
         messages.append(userMessage)
 
         let placeholderId = UUID().uuidString
@@ -181,11 +248,14 @@ final class ChatViewModel: ObservableObject {
         let success = await streamOrFallbackChat(
             conversationId: cid,
             prompt: trimmed,
+            fileIds: uploadedFileIds,
             placeholderId: placeholderId
         )
 
         if !success && !isOnline {
-            queueExistingUserMessage(messageId: userMessage.id, text: trimmed, conversationId: cid)
+            if uploadedFileIds.isEmpty {
+                queueExistingUserMessage(messageId: userMessage.id, text: trimmed, conversationId: cid)
+            }
         }
     }
 
@@ -206,7 +276,7 @@ final class ChatViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        _ = await streamOrFallbackChat(conversationId: cid, prompt: prompt, placeholderId: placeholderId)
+        _ = await streamOrFallbackChat(conversationId: cid, prompt: prompt, fileIds: nil, placeholderId: placeholderId)
     }
 
     func deleteMessage(messageId: String) {
@@ -440,18 +510,88 @@ final class ChatViewModel: ObservableObject {
         return await streamOrFallbackChat(
             conversationId: conversationId,
             prompt: prompt,
+            fileIds: nil,
             placeholderId: placeholderId
         )
     }
 
     // MARK: - Streaming Helpers
 
-    private func streamOrFallbackChat(conversationId: String, prompt: String, placeholderId: String) async -> Bool {
+    func uploadFile(data: Data, filename: String, mimeType: String) async -> String? {
+        guard let cid = conversationId, !cid.isEmpty else {
+            errorMessage = "会话未初始化，无法上传附件"
+            return nil
+        }
+        do {
+            let result = try await OpenClawAPI.shared.uploadFile(
+                conversationId: cid,
+                fileData: data,
+                filename: filename,
+                mimeType: mimeType
+            )
+            let fileId = result.fileId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !fileId.isEmpty else {
+                errorMessage = "附件上传失败：file_id 为空"
+                return nil
+            }
+            return fileId
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    private func buildLocalUserContent(text: String, files: [PendingFile]) -> String {
+        guard !files.isEmpty else { return text }
+        let first = files[0]
+        let payload: [String: Any] = [
+            "name": first.filename,
+            "size": first.size,
+            "type": first.mimeType
+        ]
+        let payloadData = (try? JSONSerialization.data(withJSONObject: payload, options: [])) ?? Data("{}".utf8)
+        let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
+
+        var contextLines: [String] = []
+        if files.count > 1 {
+            let remain = files.dropFirst().map { "\($0.filename) (\(formatBytes($0.size)))" }
+            if !remain.isEmpty {
+                contextLines.append("Additional files: \(remain.joined(separator: ", "))")
+            }
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            contextLines.append(trimmed)
+        }
+        let context = contextLines.joined(separator: "\n")
+
+        if context.isEmpty {
+            return "[[FILE_CARD]]\(payloadJSON)[[/FILE_CARD]]"
+        }
+        return "[[FILE_CARD]]\(payloadJSON)[[/FILE_CARD]][[FILE_CONTEXT]]\(context)[[/FILE_CONTEXT]]"
+    }
+
+    private func formatBytes(_ size: Int) -> String {
+        if size < 1024 {
+            return "\(size) B"
+        }
+        if size < 1024 * 1024 {
+            return String(format: "%.1f KB", Double(size) / 1024.0)
+        }
+        return String(format: "%.1f MB", Double(size) / (1024.0 * 1024.0))
+    }
+
+    private func streamOrFallbackChat(
+        conversationId: String,
+        prompt: String,
+        fileIds: [String]?,
+        placeholderId: String
+    ) async -> Bool {
         var content = ""
         var didReceiveAnyChunk = false
 
         do {
-            let stream = OpenClawAPI.shared.chatStream(conversationId: conversationId, message: prompt)
+            let stream = OpenClawAPI.shared.chatStream(conversationId: conversationId, message: prompt, fileIds: fileIds)
             for try await chunk in stream {
                 didReceiveAnyChunk = true
 
@@ -484,7 +624,11 @@ final class ChatViewModel: ObservableObject {
         }
 
         do {
-            let response = try await OpenClawAPI.shared.chat(conversationId: conversationId, message: prompt)
+            let response = try await OpenClawAPI.shared.chat(
+                conversationId: conversationId,
+                message: prompt,
+                fileIds: fileIds
+            )
             let reply = Message(
                 id: response.messageId,
                 role: response.role,

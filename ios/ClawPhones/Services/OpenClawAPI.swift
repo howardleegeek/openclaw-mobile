@@ -137,6 +137,22 @@ final class OpenClawAPI {
         }
     }
 
+    struct UploadResponse: Codable, Hashable {
+        let fileId: String
+        let filename: String
+        let mimeType: String
+        let size: Int
+        let extractedText: String?
+
+        enum CodingKeys: String, CodingKey {
+            case fileId = "file_id"
+            case filename
+            case mimeType = "mime_type"
+            case size
+            case extractedText = "extracted_text"
+        }
+    }
+
     // MARK: - Endpoints
 
     // MARK: Auth
@@ -396,13 +412,32 @@ final class OpenClawAPI {
         return try decode(ConversationDetail.self, from: data)
     }
 
-    func chat(conversationId: String, message: String) async throws -> ChatMessageResponse {
+    func uploadFile(conversationId: String, fileData: Data, filename: String, mimeType: String) async throws -> UploadResponse {
+        let url = URL(string: "\(baseURLString)/v1/conversations/\(conversationId)/upload")!
+        var request = try await authorizedRequest(url: url, method: "POST")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.addValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = multipartBody(
+            boundary: boundary,
+            fileData: fileData,
+            filename: filename,
+            mimeType: mimeType
+        )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+        return try decode(UploadResponse.self, from: data)
+    }
+
+    func chat(conversationId: String, message: String, fileIds: [String]? = nil) async throws -> ChatMessageResponse {
         let url = URL(string: "\(baseURLString)/v1/conversations/\(conversationId)/chat")!
         var request = try await authorizedRequest(url: url, method: "POST")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
-        let body = ChatRequestBody(message: message)
+        let body = ChatRequestBody(message: message, fileIds: fileIds)
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -411,7 +446,7 @@ final class OpenClawAPI {
         return try decode(ChatMessageResponse.self, from: data)
     }
 
-    func chatStream(conversationId: String, message: String) -> AsyncThrowingStream<StreamChunk, Error> {
+    func chatStream(conversationId: String, message: String, fileIds: [String]? = nil) -> AsyncThrowingStream<StreamChunk, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -421,7 +456,7 @@ final class OpenClawAPI {
                     request.addValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.addValue("text/event-stream", forHTTPHeaderField: "Accept")
 
-                    let body = ChatRequestBody(message: message)
+                    let body = ChatRequestBody(message: message, fileIds: fileIds)
                     request.httpBody = try JSONEncoder().encode(body)
 
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
@@ -507,6 +542,12 @@ final class OpenClawAPI {
 
     private struct ChatRequestBody: Encodable {
         let message: String
+        let fileIds: [String]?
+
+        enum CodingKeys: String, CodingKey {
+            case message
+            case fileIds = "file_ids"
+        }
     }
 
     private struct SSEChatChunk: Decodable {
@@ -577,6 +618,19 @@ final class OpenClawAPI {
             case customPrompt = "custom_prompt"
             case temperature
         }
+    }
+
+    private func multipartBody(boundary: String, fileData: Data, filename: String, mimeType: String) -> Data {
+        var body = Data()
+        let safeFilename = filename.isEmpty ? "upload.bin" : filename
+        let safeMime = mimeType.isEmpty ? "application/octet-stream" : mimeType
+
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(safeFilename)\"\r\n".utf8))
+        body.append(Data("Content-Type: \(safeMime)\r\n\r\n".utf8))
+        body.append(fileData)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        return body
     }
 
     private func request(url: URL, method: String) -> URLRequest {

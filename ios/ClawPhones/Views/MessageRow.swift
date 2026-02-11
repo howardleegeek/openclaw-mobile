@@ -56,12 +56,22 @@ struct MessageRow: View {
     private static let fileCardClose = "[[/FILE_CARD]]"
     private static let fileContextOpen = "[[FILE_CONTEXT]]"
     private static let fileContextClose = "[[/FILE_CONTEXT]]"
+    private static let messageMetaOpen = "[[MESSAGE_META]]"
+    private static let messageMetaClose = "[[/MESSAGE_META]]"
 
     private struct FileCardPayload {
         let name: String
         let size: Int
         let type: String
         let extraText: String
+    }
+
+    private struct MetaFilePayload {
+        let id: String
+        let name: String
+        let size: Int
+        let type: String
+        let url: String?
     }
 
     var body: some View {
@@ -185,7 +195,7 @@ struct MessageRow: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 if let imageURL {
-                    CachedThumbnailView(urlString: imageURL, maxWidth: 220)
+                    CachedThumbnailView(urlString: imageURL, maxWidth: 300)
                 }
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                     segmentView(segment)
@@ -199,7 +209,7 @@ struct MessageRow: View {
     private func messageTextWithOptionalImage(text: String, imageURL: String?, foregroundColor: Color) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if let imageURL {
-                CachedThumbnailView(urlString: imageURL, maxWidth: 220)
+                CachedThumbnailView(urlString: imageURL, maxWidth: 300)
             }
             if !text.isEmpty {
                 Text(text)
@@ -418,10 +428,26 @@ struct MessageRow: View {
             return VisualPayload(text: "", imageURL: nil)
         }
 
-        var extractedText = trimmed
+        let metaParsed = parseMessageMeta(raw: trimmed)
+        var extractedText = metaParsed.body
         var imageURL: String?
 
-        if let data = trimmed.data(using: .utf8),
+        if imageURL == nil {
+            imageURL = metaParsed.files.first(where: { $0.type.lowercased().hasPrefix("image/") })?.url
+        }
+
+        if !metaParsed.files.isEmpty {
+            let summary = metaParsed.files
+                .map { "\(fileIcon(for: $0.type)) \($0.name) (\(formatFileSize($0.size)))" }
+                .joined(separator: "\n")
+            if extractedText.isEmpty {
+                extractedText = summary
+            } else {
+                extractedText = summary + "\n\n" + extractedText
+            }
+        }
+
+        if let data = metaParsed.body.data(using: .utf8),
            let object = try? JSONSerialization.jsonObject(with: data, options: []) {
             let parsed = extractVisualPayload(from: object)
             if !parsed.text.isEmpty {
@@ -437,7 +463,7 @@ struct MessageRow: View {
         }
         if let imageURL {
             extractedText = stripMarkdownImages(from: extractedText).trimmingCharacters(in: .whitespacesAndNewlines)
-            if extractedText.isEmpty, trimmed.hasPrefix("{"), trimmed.hasSuffix("}") {
+            if extractedText.isEmpty, metaParsed.body.hasPrefix("{"), metaParsed.body.hasSuffix("}") {
                 extractedText = ""
             }
             return VisualPayload(text: extractedText, imageURL: imageURL)
@@ -536,7 +562,29 @@ struct MessageRow: View {
         guard let cardStart = raw.range(of: Self.fileCardOpen),
               let cardEnd = raw.range(of: Self.fileCardClose),
               cardStart.upperBound <= cardEnd.lowerBound else {
-            return nil
+            let metaParsed = parseMessageMeta(raw: raw)
+            guard let primaryFile = metaParsed.files.first(where: { !$0.type.lowercased().hasPrefix("image/") }) else {
+                return nil
+            }
+            var extraLines: [String] = []
+            let remain = metaParsed.files.filter { $0.id != primaryFile.id }
+            if !remain.isEmpty {
+                extraLines.append(
+                    remain
+                        .map { "\(fileIcon(for: $0.type)) \($0.name) (\(formatFileSize($0.size)))" }
+                        .joined(separator: "\n")
+                )
+            }
+            let body = metaParsed.body.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !body.isEmpty {
+                extraLines.append(body)
+            }
+            return FileCardPayload(
+                name: primaryFile.name,
+                size: max(0, primaryFile.size),
+                type: primaryFile.type,
+                extraText: extraLines.joined(separator: "\n\n")
+            )
         }
 
         let jsonString = String(raw[cardStart.upperBound..<cardEnd.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -565,17 +613,20 @@ struct MessageRow: View {
     }
 
     private func fileIcon(for type: String) -> String {
-        switch type.lowercased() {
-        case "pdf":
+        let normalized = type.lowercased()
+        switch normalized {
+        case "pdf", "application/pdf":
             return "📕"
-        case "csv":
+        case "csv", "text/csv":
             return "📊"
-        case "json":
+        case "json", "application/json":
             return "🧩"
-        case "md":
+        case "md", "markdown", "text/markdown":
             return "📝"
-        case "txt":
+        case "txt", "text/plain":
             return "📄"
+        case _ where normalized.hasPrefix("image/"):
+            return "🖼"
         default:
             return "📎"
         }
@@ -590,6 +641,52 @@ struct MessageRow: View {
             return String(format: "%.1f KB", value / 1024)
         }
         return String(format: "%.2f MB", value / (1024 * 1024))
+    }
+
+    private func parseMessageMeta(raw: String) -> (body: String, files: [MetaFilePayload]) {
+        guard raw.hasPrefix(Self.messageMetaOpen),
+              let closeRange = raw.range(of: Self.messageMetaClose),
+              raw.startIndex < closeRange.lowerBound else {
+            return (raw, [])
+        }
+
+        let metaStart = raw.index(raw.startIndex, offsetBy: Self.messageMetaOpen.count)
+        guard metaStart <= closeRange.lowerBound else {
+            return (raw, [])
+        }
+
+        let metaJSON = String(raw[metaStart..<closeRange.lowerBound])
+        let body = String(raw[closeRange.upperBound...])
+        guard let data = metaJSON.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawFiles = object["files"] as? [[String: Any]] else {
+            return (body, [])
+        }
+
+        let files = rawFiles.compactMap { entry -> MetaFilePayload? in
+            let rawName = ((entry["name"] as? String) ?? "file").trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = rawName.isEmpty ? "file" : rawName
+            let id = ((entry["id"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let type = ((entry["type"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let size = (entry["size"] as? NSNumber)?.intValue ?? 0
+
+            let rawURL = ((entry["url"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedURL: String? = {
+                if rawURL.hasPrefix("http://") || rawURL.hasPrefix("https://") {
+                    return rawURL
+                }
+                if rawURL.hasPrefix("/") {
+                    return OpenClawAPI.shared.baseURL + rawURL
+                }
+                if !id.isEmpty {
+                    return OpenClawAPI.shared.baseURL + "/v1/files/" + id
+                }
+                return nil
+            }()
+
+            return MetaFilePayload(id: id, name: name, size: max(0, size), type: type, url: resolvedURL)
+        }
+        return (body, files)
     }
 
     private func normalizedLanguage(_ language: String?) -> String {
@@ -631,6 +728,7 @@ private struct CachedThumbnailView: View {
 
     @State private var image: UIImage?
     @State private var isLoading = false
+    @State private var showFullScreen = false
 
     var body: some View {
         ZStack {
@@ -652,6 +750,33 @@ private struct CachedThumbnailView: View {
         .frame(width: maxWidth, height: maxWidth * 0.72)
         .clipped()
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture {
+            if image != nil {
+                showFullScreen = true
+            }
+        }
+        .fullScreenCover(isPresented: $showFullScreen) {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .ignoresSafeArea()
+                }
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            showFullScreen = false
+                        }
+                        .padding(12)
+                        .foregroundStyle(.white)
+                    }
+                    Spacer()
+                }
+            }
+        }
         .task(id: urlString) {
             await loadImage()
         }
@@ -702,7 +827,14 @@ final class MessageThumbnailCache {
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            var request = URLRequest(url: url)
+            let absolute = url.absoluteString
+            if absolute.contains("/v1/files/"),
+               let token = DeviceConfig.shared.deviceToken?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !token.isEmpty {
+                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+            let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                 return nil
             }

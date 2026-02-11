@@ -19,11 +19,11 @@
 
         <ImageView
             android:id="@+id/message_image"
-            android:layout_width="220dp"
+            android:layout_width="300dp"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
             android:adjustViewBounds="true"
-            android:maxHeight="220dp"
+            android:maxHeight="300dp"
             android:scaleType="centerCrop"
             android:visibility="gone" />
 

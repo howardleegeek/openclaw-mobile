@@ -1,7 +1,10 @@
 import asyncio
 import base64
 import calendar
+import hashlib
+import io
 import json
+import mimetypes
 import os
 import re
 import secrets
@@ -12,6 +15,7 @@ import uuid
 from contextlib import suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 import aiosqlite
@@ -19,7 +23,7 @@ import bcrypt
 import httpx
 import jwt
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi import FastAPI, File, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from jwt import InvalidTokenError
 
@@ -91,6 +95,12 @@ def _record_login_failure(ip: str, now: int) -> None:
 
 TOKEN_DB_PATH = os.getenv("TOKEN_DB_PATH", "./data/tokens.sqlite3")
 EXPORT_DIR = os.getenv("EXPORT_DIR", "./data/exports")
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "data", "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
+MAX_FILE_SIZE = 20 * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+ALLOWED_FILE_TYPES = {"application/pdf", "text/plain", "text/csv", "application/json", "text/markdown"}
 EXPORT_URL_TTL_SECONDS = 24 * 60 * 60
 ADMIN_KEY = os.getenv("ADMIN_KEY")  # optional
 
@@ -244,6 +254,10 @@ def _ensure_export_dir() -> None:
     os.makedirs(EXPORT_DIR, exist_ok=True)
 
 
+def _ensure_upload_dir() -> None:
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
 def _safe_export_filename(*, user_id: str, export_id: str, now: int) -> str:
     safe_user = re.sub(r"[^a-zA-Z0-9_-]", "", (user_id or ""))[:32] or "user"
     safe_export = re.sub(r"[^a-zA-Z0-9_-]", "", (export_id or ""))[:12] or "export"
@@ -315,6 +329,306 @@ def _safe_json_loads_object(s: Any) -> Dict[str, Any]:
     return obj if isinstance(obj, dict) else {}
 
 
+_MESSAGE_META_PREFIX = "[[MESSAGE_META]]"
+_MESSAGE_META_SUFFIX = "[[/MESSAGE_META]]"
+_MAX_EXTRACTED_TEXT = 50_000
+_MAX_FILE_ATTACHMENTS_PER_MESSAGE = 10
+
+
+def _normalize_file_ids(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise HTTPException(status_code=400, detail="file_ids must be an array of strings")
+
+    out: List[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise HTTPException(status_code=400, detail="file_ids must be an array of strings")
+        fid = item.strip()
+        if not fid:
+            raise HTTPException(status_code=400, detail="file_ids must not contain empty values")
+        if fid in seen:
+            continue
+        seen.add(fid)
+        out.append(fid)
+
+    if len(out) > _MAX_FILE_ATTACHMENTS_PER_MESSAGE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"too many files attached (max {_MAX_FILE_ATTACHMENTS_PER_MESSAGE})",
+        )
+    return out
+
+
+def _parse_message_content_with_meta(raw_content: Any) -> Tuple[str, Dict[str, Any]]:
+    if raw_content is None:
+        return "", {}
+    if not isinstance(raw_content, str):
+        raw_content = str(raw_content)
+
+    if raw_content.startswith(_MESSAGE_META_PREFIX):
+        start = len(_MESSAGE_META_PREFIX)
+        end = raw_content.find(_MESSAGE_META_SUFFIX, start)
+        if end > start:
+            meta_json = raw_content[start:end]
+            meta = _safe_json_loads_object(meta_json)
+            body = raw_content[end + len(_MESSAGE_META_SUFFIX) :]
+            return body, meta
+    return raw_content, {}
+
+
+def _encode_message_content_with_meta(text: str, *, file_ids: List[str], files: List[Dict[str, Any]]) -> str:
+    clean_ids = _normalize_file_ids(file_ids)
+    if not clean_ids:
+        return text
+
+    file_cards: List[Dict[str, Any]] = []
+    for f in files:
+        file_cards.append(
+            {
+                "id": str(f.get("id") or ""),
+                "name": str(f.get("original_name") or ""),
+                "size": int(f.get("size_bytes") or 0),
+                "type": str(f.get("mime_type") or ""),
+                "url": f"/v1/files/{f.get('id')}",
+            }
+        )
+
+    meta = {"file_ids": clean_ids, "files": file_cards}
+    return f"{_MESSAGE_META_PREFIX}{json.dumps(meta, ensure_ascii=False)}{_MESSAGE_META_SUFFIX}{text}"
+
+
+def _is_likely_utf8_text(file_bytes: bytes) -> bool:
+    if not file_bytes:
+        return True
+    sample = file_bytes[:4096]
+    if b"\x00" in sample:
+        return False
+    try:
+        sample.decode("utf-8")
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
+def _detect_mime_type(file_bytes: bytes, original_name: str) -> str:
+    if file_bytes.startswith(b"\xFF\xD8\xFF"):
+        return "image/jpeg"
+    if file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if file_bytes.startswith(b"GIF87a") or file_bytes.startswith(b"GIF89a"):
+        return "image/gif"
+    if len(file_bytes) >= 12 and file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    if file_bytes.startswith(b"%PDF-"):
+        return "application/pdf"
+
+    suffix = Path(original_name or "").suffix.lower()
+    if suffix in (".md", ".markdown"):
+        return "text/markdown"
+    if suffix == ".csv":
+        return "text/csv"
+    if suffix == ".json":
+        return "application/json"
+    if suffix == ".txt":
+        return "text/plain"
+
+    if _is_likely_utf8_text(file_bytes):
+        stripped = file_bytes[:2048].lstrip()
+        if stripped.startswith((b"{", b"[")):
+            return "application/json"
+        guessed_type, _ = mimetypes.guess_type(original_name or "")
+        if guessed_type in ALLOWED_FILE_TYPES:
+            return guessed_type
+        return "text/plain"
+
+    guessed_type, _ = mimetypes.guess_type(original_name or "")
+    return guessed_type or "application/octet-stream"
+
+
+def _guess_extension(mime_type: str, original_name: str) -> str:
+    suffix = Path(original_name or "").suffix.lower()
+    if suffix:
+        return suffix
+
+    preferred = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "application/pdf": ".pdf",
+        "text/plain": ".txt",
+        "text/csv": ".csv",
+        "application/json": ".json",
+        "text/markdown": ".md",
+    }
+    if mime_type in preferred:
+        return preferred[mime_type]
+    guessed = mimetypes.guess_extension(mime_type or "")
+    if guessed == ".jpe":
+        return ".jpg"
+    return guessed or ".bin"
+
+
+def _extract_text_from_pdf(file_bytes: bytes) -> str:
+    try:
+        import PyPDF2  # type: ignore
+    except Exception:
+        return ""
+
+    try:
+        reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+    except Exception:
+        return ""
+
+    parts: List[str] = []
+    total = 0
+    for page in getattr(reader, "pages", []):
+        if total >= _MAX_EXTRACTED_TEXT:
+            break
+        try:
+            page_text = page.extract_text() or ""
+        except Exception:
+            page_text = ""
+        if not page_text:
+            continue
+        page_text = page_text.replace("\x00", "").strip()
+        if not page_text:
+            continue
+        remaining = _MAX_EXTRACTED_TEXT - total
+        chunk = page_text[:remaining]
+        parts.append(chunk)
+        total += len(chunk)
+
+    return "\n\n".join(parts)[:_MAX_EXTRACTED_TEXT]
+
+
+def _extract_text_from_file(file_bytes: bytes, mime_type: str) -> Optional[str]:
+    if mime_type in ALLOWED_IMAGE_TYPES:
+        return None
+    if mime_type == "application/pdf":
+        text = _extract_text_from_pdf(file_bytes)
+        return text or ""
+    if mime_type in {"text/plain", "text/csv", "application/json", "text/markdown"}:
+        return file_bytes.decode("utf-8", errors="replace")[:_MAX_EXTRACTED_TEXT]
+    return None
+
+
+def _compose_user_text_with_file_context(user_text: str, files: List[Dict[str, Any]]) -> str:
+    text_blocks: List[str] = []
+    for f in files:
+        extracted = f.get("extracted_text")
+        if not isinstance(extracted, str):
+            continue
+        extracted = extracted.strip()
+        if not extracted:
+            continue
+        name = str(f.get("original_name") or "file")
+        text_blocks.append(f"[File: {name}]\n{extracted}")
+
+    if text_blocks:
+        context_text = "\n\n".join(text_blocks)
+        if user_text:
+            return f"{context_text}\n\n{user_text}"
+        return context_text
+    return user_text
+
+
+def _build_user_content_for_model(user_text: str, files: List[Dict[str, Any]]) -> Any:
+    text_with_context = _compose_user_text_with_file_context(user_text, files)
+    image_parts: List[Dict[str, Any]] = []
+    for f in files:
+        mime_type = str(f.get("mime_type") or "")
+        if mime_type not in ALLOWED_IMAGE_TYPES:
+            continue
+        stored_path = str(f.get("stored_path") or "")
+        if not stored_path:
+            continue
+        try:
+            with open(stored_path, "rb") as fh:
+                raw = fh.read()
+        except Exception:
+            continue
+        if not raw:
+            continue
+        image_parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime_type};base64,{base64.b64encode(raw).decode('ascii')}"},
+            }
+        )
+
+    if not image_parts:
+        return text_with_context
+
+    text_part = text_with_context.strip() if isinstance(text_with_context, str) else ""
+    if not text_part:
+        text_part = "Please analyze the attached image(s)."
+    return [{"type": "text", "text": text_part}] + image_parts
+
+
+async def _fetch_conversation_files_by_ids(db: Any, conversation_id: str, file_ids: List[str]) -> List[Dict[str, Any]]:
+    if not file_ids:
+        return []
+
+    placeholders = ",".join("?" for _ in file_ids)
+    query = (
+        "SELECT id,conversation_id,original_name,stored_path,sha256_hash,mime_type,size_bytes,extracted_text,created_at "
+        f"FROM conversation_files WHERE conversation_id=? AND id IN ({placeholders})"
+    )
+    async with db.execute(query, (conversation_id, *file_ids)) as cur:
+        rows = await cur.fetchall()
+    row_map: Dict[str, Dict[str, Any]] = {str(r["id"]): dict(r) for r in rows}
+
+    missing = [fid for fid in file_ids if fid not in row_map]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"unknown file_id(s): {', '.join(missing)}")
+
+    return [row_map[fid] for fid in file_ids]
+
+
+async def _load_file_map_for_messages(db: Any, conversation_id: str, rows: List[Any]) -> Dict[str, Dict[str, Any]]:
+    all_file_ids: List[str] = []
+    seen: set[str] = set()
+
+    for row in rows:
+        _, meta = _parse_message_content_with_meta(row["content"])
+        for fid in _normalize_file_ids(meta.get("file_ids")):
+            if fid in seen:
+                continue
+            seen.add(fid)
+            all_file_ids.append(fid)
+
+    if not all_file_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in all_file_ids)
+    query = (
+        "SELECT id,conversation_id,original_name,stored_path,sha256_hash,mime_type,size_bytes,extracted_text,created_at "
+        f"FROM conversation_files WHERE conversation_id=? AND id IN ({placeholders})"
+    )
+    async with db.execute(query, (conversation_id, *all_file_ids)) as cur:
+        fetched = await cur.fetchall()
+    return {str(r["id"]): dict(r) for r in fetched}
+
+
+def _build_oai_messages_from_rows(rows: List[Any], file_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    oai_messages: List[Dict[str, Any]] = []
+    for row in rows:
+        role = str(row["role"])
+        text, meta = _parse_message_content_with_meta(row["content"])
+        file_ids = _normalize_file_ids(meta.get("file_ids"))
+        if role == "user" and file_ids:
+            files = [file_map[fid] for fid in file_ids if fid in file_map]
+            content = _build_user_content_for_model(text, files)
+        else:
+            content = text
+        oai_messages.append({"role": role, "content": content})
+    return oai_messages
+
+
 def _persona_system_prompt(ai_config: Dict[str, Any]) -> Optional[str]:
     persona = ai_config.get("persona")
     if not isinstance(persona, str) or not persona.strip():
@@ -352,6 +666,7 @@ def _utc_day_bounds(ts: Optional[int] = None) -> Tuple[int, int, str]:
 async def _init_db() -> None:
     _ensure_dir(TOKEN_DB_PATH)
     _ensure_export_dir()
+    _ensure_upload_dir()
     async with aiosqlite.connect(TOKEN_DB_PATH) as db:
         await db.execute(
             """
@@ -450,8 +765,25 @@ async def _init_db() -> None:
             )
             """
         )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversation_files (
+              id TEXT PRIMARY KEY,
+              conversation_id TEXT NOT NULL,
+              original_name TEXT NOT NULL,
+              stored_path TEXT NOT NULL,
+              sha256_hash TEXT NOT NULL,
+              mime_type TEXT NOT NULL,
+              size_bytes INTEGER NOT NULL,
+              extracted_text TEXT,
+              created_at INTEGER NOT NULL,
+              FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+            )
+            """
+        )
         await db.execute("CREATE INDEX IF NOT EXISTS idx_conversations_token_updated ON conversations(device_token, updated_at)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_conversation_files_conv_created ON conversation_files(conversation_id, created_at DESC)")
         await db.execute(
             """
             CREATE TABLE IF NOT EXISTS analytics_events (
@@ -2441,12 +2773,144 @@ async def get_conversation(conversation_id: str, request: Request) -> Any:
         ) as cur:
             msgs = await cur.fetchall()
 
+    normalized_msgs: List[Dict[str, Any]] = []
+    for m in msgs:
+        content_text, meta = _parse_message_content_with_meta(m["content"])
+        row: Dict[str, Any] = {
+            "id": m["id"],
+            "role": m["role"],
+            "content": content_text,
+            "created_at": m["created_at"],
+        }
+        try:
+            file_ids = _normalize_file_ids(meta.get("file_ids"))
+        except Exception:
+            file_ids = []
+        if file_ids:
+            row["file_ids"] = file_ids
+        files = meta.get("files")
+        if isinstance(files, list) and files:
+            row["files"] = files
+        normalized_msgs.append(row)
+
     return {
         "id": conv["id"],
         "title": conv["title"],
         "created_at": conv["created_at"],
-        "messages": [dict(m) for m in msgs],
+        "messages": normalized_msgs,
     }
+
+
+@app.post("/v1/conversations/{conversation_id}/upload")
+async def upload_conversation_file(
+    conversation_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+) -> Any:
+    device_token = _require_device_token(request)
+    await _get_tier_for_token(device_token)
+
+    original_name = os.path.basename(str(file.filename or "upload.bin").strip() or "upload.bin")
+    file_bytes = await file.read()
+    if not isinstance(file_bytes, (bytes, bytearray)):
+        raise HTTPException(status_code=400, detail="invalid file payload")
+    file_bytes = bytes(file_bytes)
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="empty file not allowed")
+
+    mime_type = _detect_mime_type(file_bytes, original_name)
+    if mime_type not in ALLOWED_IMAGE_TYPES and mime_type not in ALLOWED_FILE_TYPES:
+        raise HTTPException(status_code=415, detail=f"unsupported file type: {mime_type}")
+
+    max_size = MAX_IMAGE_SIZE if mime_type in ALLOWED_IMAGE_TYPES else MAX_FILE_SIZE
+    if len(file_bytes) > max_size:
+        raise HTTPException(status_code=413, detail=f"file too large (max {max_size} bytes)")
+
+    sha256_hash = hashlib.sha256(file_bytes).hexdigest()
+    extension = _guess_extension(mime_type, original_name)
+    if not re.fullmatch(r"\.[A-Za-z0-9]{1,10}", extension or ""):
+        extension = ""
+    stored_path = os.path.abspath(os.path.join(UPLOAD_DIR, f"{sha256_hash}{extension}"))
+    if not os.path.exists(stored_path):
+        try:
+            with open(stored_path, "wb") as fh:
+                fh.write(file_bytes)
+        except Exception:
+            raise HTTPException(status_code=500, detail="failed to store uploaded file")
+
+    extracted_text = _extract_text_from_file(file_bytes, mime_type)
+    file_id = str(uuid.uuid4())
+    created_at = int(time.time())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id FROM conversations WHERE id=? AND device_token=?",
+            (conversation_id, device_token),
+        ) as cur:
+            conv = await cur.fetchone()
+        if not conv:
+            raise HTTPException(status_code=404, detail="conversation not found")
+
+        await db.execute(
+            """
+            INSERT INTO conversation_files(
+              id,conversation_id,original_name,stored_path,sha256_hash,mime_type,size_bytes,extracted_text,created_at
+            ) VALUES (?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                file_id,
+                conversation_id,
+                original_name,
+                stored_path,
+                sha256_hash,
+                mime_type,
+                len(file_bytes),
+                extracted_text,
+                created_at,
+            ),
+        )
+        await db.commit()
+
+    response: Dict[str, Any] = {
+        "file_id": file_id,
+        "filename": original_name,
+        "mime_type": mime_type,
+        "size": len(file_bytes),
+    }
+    if isinstance(extracted_text, str):
+        response["extracted_text"] = extracted_text
+    return response
+
+
+@app.get("/v1/files/{file_id}")
+async def get_uploaded_file(file_id: str, request: Request) -> Any:
+    device_token = _require_device_token(request)
+    await _get_tier_for_token(device_token)
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT
+              cf.id,
+              cf.original_name,
+              cf.stored_path,
+              cf.mime_type
+            FROM conversation_files cf
+            JOIN conversations c ON c.id = cf.conversation_id
+            WHERE cf.id=? AND c.device_token=?
+            """,
+            (file_id, device_token),
+        ) as cur:
+            row = await cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="file not found")
+
+    path = str(row["stored_path"])
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="file content missing")
+    return FileResponse(path=path, media_type=str(row["mime_type"]), filename=str(row["original_name"]))
 
 
 @app.post("/v1/conversations/{conversation_id}/chat")
@@ -2462,11 +2926,12 @@ async def conversation_chat(conversation_id: str, request: Request) -> Any:
         raise HTTPException(status_code=400, detail="invalid json body")
 
     user_text = body.get("message")
+    file_ids = _normalize_file_ids(body.get("file_ids"))
     if not isinstance(user_text, str):
         raise HTTPException(status_code=400, detail="message must be a string")
     user_text = user_text.strip()
-    if not user_text:
-        raise HTTPException(status_code=400, detail="message must be non-empty")
+    if not user_text and not file_ids:
+        raise HTTPException(status_code=400, detail="message must be non-empty when file_ids is empty")
     if len(user_text) > 50_000:
         raise HTTPException(status_code=400, detail="message too long (max 50000 chars)")
 
@@ -2484,11 +2949,14 @@ async def conversation_chat(conversation_id: str, request: Request) -> Any:
         if not conv:
             raise HTTPException(status_code=404, detail="conversation not found")
 
+        attached_files = await _fetch_conversation_files_by_ids(db, conversation_id, file_ids)
+        stored_user_content = _encode_message_content_with_meta(user_text, file_ids=file_ids, files=attached_files)
         await db.execute(
             "INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES (?,?,?,?,?)",
-            (user_message_id, conversation_id, "user", user_text, now),
+            (user_message_id, conversation_id, "user", stored_user_content, now),
         )
-        title_candidate = _title_from_user_message(user_text) or None
+        title_seed = user_text or (str(attached_files[0].get("original_name")) if attached_files else "")
+        title_candidate = _title_from_user_message(title_seed) or None
         await db.execute(
             """
             UPDATE conversations
@@ -2507,8 +2975,9 @@ async def conversation_chat(conversation_id: str, request: Request) -> Any:
             (conversation_id,),
         ) as cur:
             rows = await cur.fetchall()
+        file_map = await _load_file_map_for_messages(db, conversation_id, rows)
 
-    oai_messages = [{"role": r["role"], "content": r["content"]} for r in rows]
+    oai_messages = _build_oai_messages_from_rows(rows, file_map)
 
     # Step 6: reuse existing LLM routing/limits/quota logic.
     user = await _get_user_row_for_token_optional(device_token)
@@ -2581,11 +3050,18 @@ async def conversation_chat_stream(conversation_id: str, request: Request) -> An
         return StreamingResponse(_sse_error_once("invalid json body"), media_type="text/event-stream")
 
     user_text = body.get("message")
+    try:
+        file_ids = _normalize_file_ids(body.get("file_ids"))
+    except HTTPException as e:
+        return StreamingResponse(_sse_error_once(str(e.detail)), media_type="text/event-stream")
     if not isinstance(user_text, str):
         return StreamingResponse(_sse_error_once("message must be a string"), media_type="text/event-stream")
     user_text = user_text.strip()
-    if not user_text:
-        return StreamingResponse(_sse_error_once("message must be non-empty"), media_type="text/event-stream")
+    if not user_text and not file_ids:
+        return StreamingResponse(
+            _sse_error_once("message must be non-empty when file_ids is empty"),
+            media_type="text/event-stream",
+        )
     if len(user_text) > 50_000:
         return StreamingResponse(_sse_error_once("message too long (max 50000 chars)"), media_type="text/event-stream")
 
@@ -2604,11 +3080,14 @@ async def conversation_chat_stream(conversation_id: str, request: Request) -> An
             if not conv:
                 return StreamingResponse(_sse_error_once("conversation not found"), media_type="text/event-stream")
 
+            attached_files = await _fetch_conversation_files_by_ids(db, conversation_id, file_ids)
+            stored_user_content = _encode_message_content_with_meta(user_text, file_ids=file_ids, files=attached_files)
             await db.execute(
                 "INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES (?,?,?,?,?)",
-                (user_message_id, conversation_id, "user", user_text, now),
+                (user_message_id, conversation_id, "user", stored_user_content, now),
             )
-            title_candidate = _title_from_user_message(user_text) or None
+            title_seed = user_text or (str(attached_files[0].get("original_name")) if attached_files else "")
+            title_candidate = _title_from_user_message(title_seed) or None
             await db.execute(
                 """
                 UPDATE conversations
@@ -2627,6 +3106,7 @@ async def conversation_chat_stream(conversation_id: str, request: Request) -> An
                 (conversation_id,),
             ) as cur:
                 rows = await cur.fetchall()
+            file_map = await _load_file_map_for_messages(db, conversation_id, rows)
     except Exception as e:
         print(f"[chat/stream] internal error: {e!r}")
         traceback.print_exc()
@@ -2636,7 +3116,7 @@ async def conversation_chat_stream(conversation_id: str, request: Request) -> An
 
         return StreamingResponse(_gen_internal_error(), media_type="text/event-stream")
 
-    oai_messages = [{"role": r["role"], "content": r["content"]} for r in rows]
+    oai_messages = _build_oai_messages_from_rows(rows, file_map)
 
     # Keep behavior consistent with non-stream chat: optional user persona/system prompt + overrides.
     user = await _get_user_row_for_token_optional(device_token)
@@ -2848,6 +3328,7 @@ async def delete_conversation(conversation_id: str, request: Request) -> Any:
             raise HTTPException(status_code=404, detail="conversation not found")
 
         await db.execute("DELETE FROM messages WHERE conversation_id=?", (conversation_id,))
+        await db.execute("DELETE FROM conversation_files WHERE conversation_id=?", (conversation_id,))
         await db.execute("DELETE FROM conversations WHERE id=? AND device_token=?", (conversation_id, device_token))
         await db.commit()
 

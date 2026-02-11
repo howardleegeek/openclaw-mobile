@@ -38,6 +38,18 @@
         android:textSize="12sp"
         android:visibility="gone" />
 
+    <TextView
+        android:id="@+id/attachment_preview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="4dp"
+        android:textColor="@color/clawphones_secondary_text"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -89,6 +101,23 @@
                 android:padding="10dp"
                 android:scaleType="centerInside"
                 android:src="@android:drawable/ic_btn_speak_now"
+                android:tint="@color/clawphones_accent" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp">
+
+            <ImageButton
+                android:id="@+id/message_attach"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/clawphones_button_outline_bg"
+                android:contentDescription="附件"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:src="@android:drawable/ic_menu_add"
                 android:tint="@color/clawphones_accent" />
         </FrameLayout>
 

@@ -81,14 +81,30 @@ struct ChatView: View {
 
             Divider()
 
-            ChatInputBar(text: $inputText, isLoading: viewModel.isLoading) {
+            ChatInputBar(
+                text: $inputText,
+                isLoading: viewModel.isLoading,
+                pendingFiles: viewModel.pendingFiles,
+                onRemovePendingFile: { fileId in
+                    viewModel.removePendingFile(id: fileId)
+                },
+                onAttachmentPicked: { data, filename, mimeType, thumbnail in
+                    viewModel.addPendingFile(
+                        data: data,
+                        filename: filename,
+                        mimeType: mimeType,
+                        thumbnail: thumbnail
+                    )
+                },
+                onSend: {
                 let textToSend = inputText
                 inputText = ""
                 CrashReporter.shared.setLastAction("sending_message")
                 Task {
                     await viewModel.sendMessage(text: textToSend)
                 }
-            }
+                }
+            )
         }
         .navigationTitle(viewModel.conversationTitle?.isEmpty == false ? (viewModel.conversationTitle ?? "") : "Chat")
         .navigationBarTitleDisplayMode(.inline)
@@ -188,5 +204,15 @@ struct ChatView: View {
 
     private func messageDate(for message: Message) -> Date {
         Date(timeIntervalSince1970: TimeInterval(message.createdAt))
+    }
+
+    private func formatFileSize(_ size: Int) -> String {
+        if size < 1024 {
+            return "\(size) B"
+        }
+        if size < 1024 * 1024 {
+            return String(format: "%.1f KB", Double(size) / 1024.0)
+        }
+        return String(format: "%.1f MB", Double(size) / (1024.0 * 1024.0))
     }
 }

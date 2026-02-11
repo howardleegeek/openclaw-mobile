@@ -11,6 +11,7 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Minimal HTTP client for ClawPhones backend API.
@@ -176,6 +178,27 @@ public class ClawPhonesAPI {
         void onComplete(String fullContent, String messageId);
         /** Called on error (network, API, or stream parse error). */
         void onError(Exception error);
+    }
+
+    public interface UploadCallback {
+        void onSuccess(UploadedFile uploadedFile);
+        void onError(Exception error);
+    }
+
+    public static class UploadedFile {
+        public final String fileId;
+        public final String filename;
+        public final String mimeType;
+        public final long size;
+        public final String extractedText;
+
+        public UploadedFile(String fileId, String filename, String mimeType, long size, String extractedText) {
+            this.fileId = fileId == null ? "" : fileId;
+            this.filename = filename == null ? "" : filename;
+            this.mimeType = mimeType == null ? "" : mimeType;
+            this.size = Math.max(0L, size);
+            this.extractedText = extractedText;
+        }
     }
 
     // ── SharedPreferences helpers ───────────────────────────────────────────────
@@ -523,11 +546,90 @@ public class ClawPhonesAPI {
         doPostRaw(BASE_URL + "/v1/crash-reports", body, token);
     }
 
+    public static void uploadFile(
+        Context context,
+        String conversationId,
+        byte[] fileData,
+        String filename,
+        String mimeType,
+        UploadCallback callback
+    ) {
+        if (callback == null) {
+            throw new IllegalArgumentException("callback is required");
+        }
+        try {
+            callback.onSuccess(uploadFileBlocking(context, conversationId, fileData, filename, mimeType));
+        } catch (Exception e) {
+            callback.onError(e);
+        }
+    }
+
+    public static UploadedFile uploadFileBlocking(
+        Context context,
+        String conversationId,
+        byte[] fileData,
+        String filename,
+        String mimeType
+    ) throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
+        if (conversationId == null || conversationId.trim().isEmpty()) {
+            throw new ApiException(400, "conversation_id is required");
+        }
+        if (fileData == null || fileData.length == 0) {
+            throw new ApiException(400, "file data is empty");
+        }
+
+        String safeName = filename == null ? "upload.bin" : filename.trim();
+        if (safeName.isEmpty()) safeName = "upload.bin";
+        String safeMime = mimeType == null ? "" : mimeType.trim();
+        if (safeMime.isEmpty()) safeMime = "application/octet-stream";
+
+        String boundary = "----clawphones-" + UUID.randomUUID().toString();
+        String urlStr = BASE_URL + "/v1/conversations/" + conversationId + "/upload";
+        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
+        conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        conn.setReadTimeout(READ_TIMEOUT_MS);
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Accept", "application/json");
+        conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        if (token != null && !token.trim().isEmpty()) {
+            conn.setRequestProperty("Authorization", "Bearer " + token.trim());
+        }
+        conn.setDoOutput(true);
+
+        try (OutputStream os = conn.getOutputStream()) {
+            ByteArrayOutputStream head = new ByteArrayOutputStream();
+            head.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
+            head.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + escapeQuoted(safeName) + "\"\r\n")
+                .getBytes(StandardCharsets.UTF_8));
+            head.write(("Content-Type: " + safeMime + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+            os.write(head.toByteArray());
+            os.write(fileData);
+            os.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+            os.flush();
+        }
+
+        JSONObject resp = readResponse(conn);
+        return new UploadedFile(
+            resp.optString("file_id", ""),
+            resp.optString("filename", safeName),
+            resp.optString("mime_type", safeMime),
+            resp.optLong("size", fileData.length),
+            resp.optString("extracted_text", null)
+        );
+    }
+
     /**
      * POST /v1/conversations/{id}/chat/stream -> SSE streaming response.
      * Must be called from a background thread. Callbacks fire on the calling thread.
      */
-    public static void chatStream(Context context, String conversationId, String message, StreamCallback callback) {
+    public static void chatStream(
+        Context context,
+        String conversationId,
+        String message,
+        List<String> fileIds,
+        StreamCallback callback
+    ) {
         if (callback == null) {
             throw new IllegalArgumentException("callback is required");
         }
@@ -537,6 +639,19 @@ public class ClawPhonesAPI {
             String token = resolveAuthTokenForRequest(context);
             JSONObject body = new JSONObject();
             body.put("message", message);
+            if (fileIds != null && !fileIds.isEmpty()) {
+                JSONArray array = new JSONArray();
+                for (String fileId : fileIds) {
+                    if (fileId == null) continue;
+                    String normalized = fileId.trim();
+                    if (!normalized.isEmpty()) {
+                        array.put(normalized);
+                    }
+                }
+                if (array.length() > 0) {
+                    body.put("file_ids", array);
+                }
+            }
 
             String urlStr = BASE_URL + "/v1/conversations/" + conversationId + "/chat/stream";
             conn = (HttpURLConnection) new URL(urlStr).openConnection();
@@ -1238,6 +1353,11 @@ public class ClawPhonesAPI {
         if ("writing".equals(normalized)) return "writer";
         if ("translation".equals(normalized)) return "translator";
         return normalized;
+    }
+
+    private static String escapeQuoted(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private static String sanitizeFileNamePart(String raw) {
