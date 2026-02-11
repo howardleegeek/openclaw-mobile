@@ -33,6 +33,7 @@ public class PreinstallActivity extends Activity {
     private ProgressBar mProgress;
     private Button mRetryButton;
     private Button mManualSetupButton;
+    private Button mSkipToChatButton;
 
     private ClawPhonesService mService;
     private boolean mBound = false;
@@ -76,6 +77,12 @@ public class PreinstallActivity extends Activity {
             Intent intent = new Intent(this, SetupActivity.class);
             intent.putExtra(SetupActivity.EXTRA_START_STEP, SetupActivity.STEP_API_KEY);
             startActivity(intent);
+        });
+
+        mSkipToChatButton = findViewById(R.id.preinstall_skip_to_chat);
+        mSkipToChatButton.setOnClickListener(v -> {
+            Logger.logInfo(LOG_TAG, "User skipped OpenClaw install, going directly to AI Chat");
+            openChat();
         });
     }
 
@@ -162,7 +169,7 @@ public class PreinstallActivity extends Activity {
     }
 
     private void openChat() {
-        Intent intent = new Intent(this, ChatActivity.class);
+        Intent intent = new Intent(this, ai.clawphones.agent.chat.ChatActivity.class);
         startActivity(intent);
         finish();
     }
@@ -190,6 +197,7 @@ public class PreinstallActivity extends Activity {
         mErrorText.setVisibility(View.VISIBLE);
         mRetryButton.setVisibility(View.VISIBLE);
         mManualSetupButton.setVisibility(View.VISIBLE);
+        mSkipToChatButton.setVisibility(View.VISIBLE);
         mProgress.setVisibility(View.GONE);
     }
 
@@ -197,6 +205,7 @@ public class PreinstallActivity extends Activity {
         mErrorText.setVisibility(View.GONE);
         mRetryButton.setVisibility(View.GONE);
         mManualSetupButton.setVisibility(View.GONE);
+        mSkipToChatButton.setVisibility(View.GONE);
         mProgress.setVisibility(View.VISIBLE);
     }
 }

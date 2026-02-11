@@ -39,6 +39,7 @@ public class ClawPhonesAPI {
 
     private static final int CONNECT_TIMEOUT_MS = 15_000;
     private static final int READ_TIMEOUT_MS = 60_000;
+    private static final int STREAM_READ_TIMEOUT_MS = 120_000;
 
     private static final String PREFS = "clawphones_api";
     private static final String PREF_TOKEN = "token";
@@ -65,6 +66,18 @@ public class ClawPhonesAPI {
             this.updatedAt = updatedAt;
             this.messageCount = messageCount;
         }
+    }
+
+    /**
+     * Callback interface for SSE streaming chat responses.
+     */
+    public interface StreamCallback {
+        /** Called on each text delta (may be called many times). */
+        void onDelta(String delta);
+        /** Called once when streaming completes with the full content. */
+        void onComplete(String fullContent, String messageId);
+        /** Called on error (network, API, or stream parse error). */
+        void onError(Exception error);
     }
 
     // ── SharedPreferences helpers ───────────────────────────────────────────────
@@ -162,6 +175,90 @@ public class ClawPhonesAPI {
         return extractAssistantContent(resp);
     }
 
+    /**
+     * POST /v1/conversations/{id}/chat/stream -> SSE streaming response.
+     * Must be called from a background thread. Callbacks fire on the calling thread.
+     */
+    public static void chatStream(String token, String conversationId, String message, StreamCallback callback) {
+        if (callback == null) {
+            throw new IllegalArgumentException("callback is required");
+        }
+
+        HttpURLConnection conn = null;
+        try {
+            JSONObject body = new JSONObject();
+            body.put("message", message);
+
+            String urlStr = BASE_URL + "/v1/conversations/" + conversationId + "/chat/stream";
+            conn = (HttpURLConnection) new URL(urlStr).openConnection();
+            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(STREAM_READ_TIMEOUT_MS);
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Accept", "text/event-stream");
+            conn.setRequestProperty("Content-Type", "application/json");
+            if (token != null && !token.trim().isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + token.trim());
+            }
+            conn.setDoOutput(true);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) {
+                String rawError = readRawBody(conn.getErrorStream());
+                Logger.logError(LOG_TAG, "Stream API error " + code + ": " + rawError);
+                callback.onError(new ApiException(code, rawError.isEmpty() ? "HTTP " + code : rawError));
+                return;
+            }
+
+            StringBuilder accumulated = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.isEmpty() || line.startsWith(":")) continue;
+                    if (!line.startsWith("data:")) continue;
+
+                    String dataJson = line.substring("data:".length()).trim();
+                    if (dataJson.isEmpty()) continue;
+
+                    JSONObject event = new JSONObject(dataJson);
+                    if (event.has("error")) {
+                        String msg = event.optString("error", "stream error");
+                        callback.onError(new ApiException(code, msg));
+                        return;
+                    }
+
+                    boolean done = event.optBoolean("done", false);
+                    if (!done) {
+                        String delta = event.optString("delta", "");
+                        if (!delta.isEmpty()) {
+                            accumulated.append(delta);
+                            callback.onDelta(delta);
+                        }
+                        continue;
+                    }
+
+                    String fullContent = event.optString("content", null);
+                    if (fullContent == null || fullContent.isEmpty()) {
+                        fullContent = accumulated.toString();
+                    }
+                    String messageId = event.optString("message_id", null);
+                    callback.onComplete(fullContent, messageId);
+                    return;
+                }
+            }
+
+            callback.onError(new IOException("stream closed before done event"));
+        } catch (IOException | JSONException e) {
+            callback.onError(e);
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
     // ── HTTP internals ────────────────────────────────────────────────────────
 
     private static JSONObject doGet(String urlStr, String token) throws IOException, ApiException, JSONException {
@@ -238,6 +335,18 @@ public class ClawPhonesAPI {
         return new JSONObject(raw);
     }
 
+    private static String readRawBody(java.io.InputStream stream) throws IOException {
+        if (stream == null) return "";
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+        }
+        return sb.toString();
+    }
+
     // ── Response parsing ──────────────────────────────────────────────────────
 
     private static String extractToken(JSONObject resp) throws JSONException {
@@ -299,4 +408,3 @@ public class ClawPhonesAPI {
         return resp.toString();
     }
 }
-

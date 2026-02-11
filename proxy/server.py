@@ -119,7 +119,7 @@ class TierLimits:
 
 
 LIMITS: Dict[str, TierLimits] = {
-    "free": TierLimits(max_context_tokens=8_000, max_output_tokens=512, daily_tokens=60_000),
+    "free": TierLimits(max_context_tokens=8_000, max_output_tokens=2048, daily_tokens=60_000),
     "pro": TierLimits(max_context_tokens=32_000, max_output_tokens=1024, daily_tokens=600_000),
     "max": TierLimits(max_context_tokens=64_000, max_output_tokens=2048, daily_tokens=1_200_000),
 }
@@ -1166,10 +1166,10 @@ async def _call_llm(
 
     # Optional provider forcing by URL prefix (deepseek/kimi/claude).
     provider = forced_provider or {
-        "free": "deepseek",
+        "free": "kimi",
         "pro": "kimi",
         "max": "claude",
-    }.get(tier, "deepseek")
+    }.get(tier, "kimi")
 
     # Enforce: forced provider cannot exceed token tier.
     if forced_provider:
@@ -1656,7 +1656,7 @@ async def conversation_chat_stream(conversation_id: str, request: Request) -> An
 
     async def stream_gen() -> AsyncIterator[bytes]:
         limits = LIMITS.get(tier) or LIMITS["free"]
-        provider = {"free": "deepseek", "pro": "kimi", "max": "claude"}.get(tier, "deepseek")
+        provider = {"free": "kimi", "pro": "kimi", "max": "claude"}.get(tier, "kimi")
 
         try:
             # Build OpenAI-compatible request body.

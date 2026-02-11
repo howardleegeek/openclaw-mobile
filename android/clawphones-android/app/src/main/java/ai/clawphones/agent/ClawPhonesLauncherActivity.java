@@ -55,6 +55,19 @@ public class ClawPhonesLauncherActivity extends Activity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Fast path: go directly to AI Chat. No permissions or OpenClaw install needed.
+        // End users just want to chat — skip the entire setup flow.
+        Logger.logInfo(LOG_TAG, "Launching directly to AI Chat (fast path)");
+        Intent chatIntent = new Intent(this, ai.clawphones.agent.chat.LoginActivity.class);
+        startActivity(chatIntent);
+        finish();
+        return;
+
+        /*
+         * Original flow preserved below for future use (when OpenClaw local agent is needed):
+         * Permission requests → Bootstrap install → OpenClaw install → Gateway start → Chat
+         *
         setContentView(R.layout.activity_clawphones_launcher);
 
         mWelcomeContainer = findViewById(R.id.welcome_container);
@@ -76,6 +89,7 @@ public class ClawPhonesLauncherActivity extends Activity {
             showLoadingPhase();
             mHandler.postDelayed(this::checkAndRoute, 300);
         });
+        */
     }
 
     @Override

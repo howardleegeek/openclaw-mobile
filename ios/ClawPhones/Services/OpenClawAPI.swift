@@ -452,32 +452,32 @@ final class OpenClawAPI {
         return request
     }
 
-	    private func validate(response: URLResponse, data: Data) throws {
-	        guard let httpResponse = response as? HTTPURLResponse else {
-	            throw ClawPhonesError.networkError(URLError(.badServerResponse))
-	        }
-	
-	        guard (200...299).contains(httpResponse.statusCode) else {
-	            if httpResponse.statusCode == 401 {
-	                // Auto-clear invalid token
-	                DeviceConfig.shared.clearTokens()
-	                // Post notification so UI can react
-	                NotificationCenter.default.post(name: Notification.Name("ClawPhonesAuthExpired"), object: nil)
-	                throw ClawPhonesError.unauthorized
-	            }
-	
-	            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
-	            throw ClawPhonesError.apiError(message)
-	        }
-	    }
-	
-	    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-	        do {
-	            return try JSONDecoder().decode(T.self, from: data)
-	        } catch {
-	            print("[ClawPhones] Decode error for \(T.self): \(error)")
-	            print("[ClawPhones] Raw data: \(String(data: data, encoding: .utf8) ?? "non-utf8")")
-	            throw ClawPhonesError.decodingError
-	        }
-	    }
-	}
+    private func validate(response: URLResponse, data: Data) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ClawPhonesError.networkError(URLError(.badServerResponse))
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if httpResponse.statusCode == 401 {
+                // Auto-clear invalid token
+                DeviceConfig.shared.clearTokens()
+                // Post notification so UI can react
+                NotificationCenter.default.post(name: Notification.Name("ClawPhonesAuthExpired"), object: nil)
+                throw ClawPhonesError.unauthorized
+            }
+
+            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw ClawPhonesError.apiError(message)
+        }
+    }
+
+    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            print("[ClawPhones] Decode error for \(T.self): \(error)")
+            print("[ClawPhones] Raw data: \(String(data: data, encoding: .utf8) ?? "non-utf8")")
+            throw ClawPhonesError.decodingError
+        }
+    }
+}

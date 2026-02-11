@@ -118,12 +118,12 @@
 
         <activity
             android:name="ai.clawphones.agent.chat.LoginActivity"
-            android:exported="false"
+            android:exported="true"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 
         <activity
             android:name="ai.clawphones.agent.chat.ChatActivity"
-            android:exported="false"
+            android:exported="true"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 

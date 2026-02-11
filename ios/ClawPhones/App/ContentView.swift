@@ -34,20 +34,20 @@ struct ContentView: View {
             .tag(Tab.settings)
         }
         .environmentObject(auth)
-	        .fullScreenCover(isPresented: Binding(
-	            get: { !auth.isAuthenticated },
-	            set: { _ in }
-	        )) {
-	            NavigationStack {
-	                LoginView()
-	            }
-	            .environmentObject(auth)
-	        }
-	        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ClawPhonesAuthExpired"))) { _ in
-	            auth.refreshAuthState()
-	        }
-	        .onAppear {
-	            auth.refreshAuthState()
-	        }
-	    }
-	}
+        .fullScreenCover(isPresented: Binding(
+            get: { !auth.isAuthenticated },
+            set: { _ in }
+        )) {
+            NavigationStack {
+                LoginView()
+            }
+            .environmentObject(auth)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ClawPhonesAuthExpired"))) { _ in
+            auth.refreshAuthState()
+        }
+        .onAppear {
+            auth.refreshAuthState()
+        }
+    }
+}

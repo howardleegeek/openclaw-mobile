@@ -4,8 +4,10 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Patterns;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -26,8 +28,11 @@ public class LoginActivity extends AppCompatActivity {
 
     private EditText mEmail;
     private EditText mPassword;
-    private Button mLoginButton;
-    private Button mRegisterButton;
+    private EditText mName;
+    private Button mSubmitButton;
+    private TextView mToggle;
+
+    private boolean mRegisterMode = false;
 
     private ExecutorService mExecutor;
     private volatile boolean mDestroyed = false;
@@ -47,13 +52,19 @@ public class LoginActivity extends AppCompatActivity {
 
         mEmail = findViewById(R.id.login_email);
         mPassword = findViewById(R.id.login_password);
-        mLoginButton = findViewById(R.id.login_button);
-        mRegisterButton = findViewById(R.id.register_button);
+        mName = findViewById(R.id.login_name);
+        mSubmitButton = findViewById(R.id.login_submit);
+        mToggle = findViewById(R.id.login_toggle);
 
         mExecutor = Executors.newSingleThreadExecutor();
 
-        mLoginButton.setOnClickListener(v -> onLogin());
-        mRegisterButton.setOnClickListener(v -> onRegister());
+        updateModeUi();
+
+        mSubmitButton.setOnClickListener(v -> doAuth(mRegisterMode));
+        mToggle.setOnClickListener(v -> {
+            mRegisterMode = !mRegisterMode;
+            updateModeUi();
+        });
     }
 
     @Override
@@ -69,17 +80,22 @@ public class LoginActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    private void onLogin() {
-        doAuth(false);
-    }
-
-    private void onRegister() {
-        doAuth(true);
+    private void updateModeUi() {
+        if (mName != null) {
+            mName.setVisibility(mRegisterMode ? View.VISIBLE : View.GONE);
+        }
+        if (mSubmitButton != null) {
+            mSubmitButton.setText(mRegisterMode ? "\u6ce8\u518c" : "\u767b\u5f55");
+        }
+        if (mToggle != null) {
+            mToggle.setText(mRegisterMode ? "\u5df2\u6709\u8d26\u53f7\uff1f\u53bb\u767b\u5f55" : "\u6ca1\u6709\u8d26\u53f7\uff1f\u53bb\u6ce8\u518c");
+        }
     }
 
     private void doAuth(boolean register) {
         String email = safeTrim(mEmail.getText().toString());
         String password = safeTrim(mPassword.getText().toString());
+        String name = mRegisterMode && mName != null ? safeTrim(mName.getText().toString()) : "";
 
         // Validate email using Android's built-in pattern
         if (TextUtils.isEmpty(email) || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
@@ -88,6 +104,10 @@ public class LoginActivity extends AppCompatActivity {
         }
         if (TextUtils.isEmpty(password) || password.length() < 8) {
             toast("\u5bc6\u7801\u81f3\u5c11 8 \u4f4d");
+            return;
+        }
+        if (register && TextUtils.isEmpty(name)) {
+            toast("\u8bf7\u8f93\u5165\u540d\u5b57");
             return;
         }
 
@@ -101,7 +121,7 @@ public class LoginActivity extends AppCompatActivity {
                 try {
                     String token;
                     if (register) {
-                        token = ClawPhonesAPI.register(email, password, email.split("@")[0]);
+                        token = ClawPhonesAPI.register(email, password, name);
                     } else {
                         token = ClawPhonesAPI.login(email, password);
                     }
@@ -146,14 +166,14 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void setBusy(boolean busy) {
-        if (mLoginButton != null) {
-            mLoginButton.setEnabled(!busy);
-            mLoginButton.setAlpha(busy ? 0.6f : 1.0f);
-            mLoginButton.setText(busy ? "\u8bf7\u7a0d\u5019\u2026" : "\u767b\u5f55");
+        if (mSubmitButton != null) {
+            mSubmitButton.setEnabled(!busy);
+            mSubmitButton.setAlpha(busy ? 0.6f : 1.0f);
+            mSubmitButton.setText(busy ? "\u8bf7\u7a0d\u5019\u2026" : (mRegisterMode ? "\u6ce8\u518c" : "\u767b\u5f55"));
         }
-        if (mRegisterButton != null) {
-            mRegisterButton.setEnabled(!busy);
-            mRegisterButton.setAlpha(busy ? 0.6f : 1.0f);
+        if (mToggle != null) {
+            mToggle.setEnabled(!busy);
+            mToggle.setAlpha(busy ? 0.6f : 1.0f);
         }
     }
 

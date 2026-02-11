@@ -223,6 +223,15 @@ public final class TermuxInstaller {
 
                     Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
 
+                    // Fix shebangs: bootstrap was built for app.botdrop but we are ai.clawphones.agent.
+                    // All script shebangs reference /data/data/app.botdrop/... which doesn't exist.
+                    fixBootstrapShebangs(TERMUX_PREFIX_DIR);
+                    Logger.logInfo(LOG_TAG, "Shebang paths patched.");
+
+                    // Ensure home directory exists (needed by install.sh for logging)
+                    File homeDir = new File(TermuxConstants.TERMUX_HOME_DIR_PATH);
+                    if (!homeDir.exists()) homeDir.mkdirs();
+
                     // Recreate env file since termux prefix was wiped earlier
                     TermuxShellEnvironment.writeEnvironmentToFile(activity);
 
@@ -378,6 +387,60 @@ public final class TermuxInstaller {
                 }
             }
         }.start();
+    }
+
+    /**
+     * Patch shebangs in all scripts under $PREFIX/bin/ and $PREFIX/lib/node_modules/.bin/
+     * to replace the old bootstrap package name (app.botdrop) with the actual package name.
+     * This is necessary because bootstrap zip was built for app.botdrop but we run as ai.clawphones.agent.
+     */
+    private static void fixBootstrapShebangs(File prefixDir) {
+        final String OLD_PREFIX = "/data/data/app.botdrop/";
+        final String NEW_PREFIX = "/data/data/" + TermuxConstants.TERMUX_PACKAGE_NAME + "/";
+        if (OLD_PREFIX.equals(NEW_PREFIX)) return; // No patching needed if package matches
+
+        File[] dirs = {
+            new File(prefixDir, "bin"),
+            new File(prefixDir, "lib/node_modules/.bin"),
+            new File(prefixDir, "libexec"),
+            new File(prefixDir, "share/clawphones")
+        };
+        int patched = 0;
+        for (File dir : dirs) {
+            if (!dir.isDirectory()) continue;
+            File[] files = dir.listFiles();
+            if (files == null) continue;
+            for (File f : files) {
+                if (!f.isFile() || f.length() > 1_000_000) continue; // skip large binaries
+                try {
+                    // Read first 512 bytes to check if it's a text script (starts with #!)
+                    byte[] head = new byte[Math.min(512, (int) f.length())];
+                    try (java.io.FileInputStream fis = new java.io.FileInputStream(f)) {
+                        fis.read(head);
+                    }
+                    String headStr = new String(head, java.nio.charset.StandardCharsets.UTF_8);
+                    if (!headStr.startsWith("#!") && !headStr.contains(OLD_PREFIX)) continue;
+
+                    // Read full file
+                    byte[] raw = new byte[(int) f.length()];
+                    try (java.io.FileInputStream fis = new java.io.FileInputStream(f)) {
+                        fis.read(raw);
+                    }
+                    String content = new String(raw, java.nio.charset.StandardCharsets.UTF_8);
+                    if (!content.contains(OLD_PREFIX)) continue;
+
+                    // Replace and write back
+                    String fixed = content.replace(OLD_PREFIX, NEW_PREFIX);
+                    try (java.io.FileOutputStream fos = new java.io.FileOutputStream(f)) {
+                        fos.write(fixed.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    }
+                    patched++;
+                } catch (Exception e) {
+                    Logger.logWarn(LOG_TAG, "Failed to patch shebang in " + f.getName() + ": " + e.getMessage());
+                }
+            }
+        }
+        Logger.logInfo(LOG_TAG, "Patched " + patched + " script shebangs from " + OLD_PREFIX + " to " + NEW_PREFIX);
     }
 
     private static Error ensureDirectoryExists(File directory) {

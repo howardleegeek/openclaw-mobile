@@ -79,6 +79,18 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
+        <Button
+            android:id="@+id/preinstall_skip_to_chat"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="10dp"
+            android:text="跳过，直接聊天"
+            android:textSize="16sp"
+            android:background="@drawable/clawphones_button_outline_bg"
+            android:textColor="@color/clawphones_accent"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
     </LinearLayout>
 
 </FrameLayout>

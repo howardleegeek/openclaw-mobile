@@ -50,6 +50,9 @@ public class ChatActivity extends AppCompatActivity {
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
     private volatile boolean mDestroyed = false;
     private boolean mBusy = false;
+    private long mLastUpdateMs = 0L;
+    @Nullable private Runnable mPendingUpdate = null;
+    private static final long UPDATE_THROTTLE_MS = 50L;
 
     private String mToken;
     private String mConversationId;
@@ -199,37 +202,57 @@ public class ChatActivity extends AppCompatActivity {
         final int idx = addAssistantMessage("\u601d\u8003\u4e2d\u2026");
 
         execSafe(() -> {
-            try {
-                String reply = ClawPhonesAPI.chat(mToken, mConversationId, text);
-                runSafe(() -> {
-                    updateAssistantMessage(idx, reply);
-                    mBusy = false;
-                    setInputEnabled(true);
-                });
-            } catch (IOException e) {
-                runSafe(() -> {
-                    updateAssistantMessage(idx, "\u7f51\u7edc\u9519\u8bef: " + safeMsg(e));
-                    mBusy = false;
-                    setInputEnabled(true);
-                });
-            } catch (JSONException e) {
-                runSafe(() -> {
-                    updateAssistantMessage(idx, "\u6570\u636e\u89e3\u6790\u9519\u8bef");
-                    mBusy = false;
-                    setInputEnabled(true);
-                });
-            } catch (ClawPhonesAPI.ApiException e) {
-                runSafe(() -> {
-                    if (e.statusCode == 401) {
-                        ClawPhonesAPI.clearToken(ChatActivity.this);
-                        redirectToLogin("\u767b\u5f55\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55");
-                        return;
-                    }
-                    updateAssistantMessage(idx, "\u8bf7\u6c42\u5931\u8d25: " + safeErr(e));
-                    mBusy = false;
-                    setInputEnabled(true);
-                });
-            }
+            final StringBuilder accumulated = new StringBuilder();
+            ClawPhonesAPI.chatStream(mToken, mConversationId, text, new ClawPhonesAPI.StreamCallback() {
+                @Override
+                public void onDelta(String delta) {
+                    accumulated.append(delta);
+                    final String current = accumulated.toString();
+                    runSafe(() -> updateAssistantMessageThrottled(idx, current));
+                }
+
+                @Override
+                public void onComplete(String fullContent, String messageId) {
+                    runSafe(() -> {
+                        clearPendingUpdate();
+                        String finalContent = fullContent;
+                        if (TextUtils.isEmpty(finalContent)) {
+                            finalContent = accumulated.toString();
+                        }
+                        updateAssistantMessage(idx, finalContent);
+                        mBusy = false;
+                        setInputEnabled(true);
+                    });
+                }
+
+                @Override
+                public void onError(Exception error) {
+                    runSafe(() -> {
+                        clearPendingUpdate();
+                        if (error instanceof ClawPhonesAPI.ApiException
+                            && ((ClawPhonesAPI.ApiException) error).statusCode == 401) {
+                            ClawPhonesAPI.clearToken(ChatActivity.this);
+                            redirectToLogin("\u767b\u5f55\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55");
+                            return;
+                        }
+
+                        String partial = accumulated.toString();
+                        if (!partial.isEmpty()) {
+                            updateAssistantMessage(idx, partial + "\n\n\u26a0 \u8fde\u63a5\u4e2d\u65ad");
+                        } else if (error instanceof ClawPhonesAPI.ApiException) {
+                            updateAssistantMessage(idx, "\u8bf7\u6c42\u5931\u8d25: " + safeErr((ClawPhonesAPI.ApiException) error));
+                        } else if (error instanceof JSONException) {
+                            updateAssistantMessage(idx, "\u6570\u636e\u89e3\u6790\u9519\u8bef");
+                        } else if (error instanceof IOException) {
+                            updateAssistantMessage(idx, "\u7f51\u7edc\u9519\u8bef: " + safeMsg(error));
+                        } else {
+                            updateAssistantMessage(idx, "\u8bf7\u6c42\u5931\u8d25: " + safeMsg(error));
+                        }
+                        mBusy = false;
+                        setInputEnabled(true);
+                    });
+                }
+            });
         });
     }
 
@@ -272,6 +295,42 @@ public class ChatActivity extends AppCompatActivity {
         m.text = text;
         mAdapter.notifyItemChanged(index);
         scrollToBottom();
+    }
+
+    private void updateAssistantMessageThrottled(int index, String text) {
+        if (index < 0 || index >= mMessages.size()) return;
+        ChatMessage m = mMessages.get(index);
+        m.text = text;
+
+        long now = System.currentTimeMillis();
+        long elapsed = now - mLastUpdateMs;
+        if (elapsed >= UPDATE_THROTTLE_MS) {
+            clearPendingUpdate();
+            mLastUpdateMs = now;
+            mAdapter.notifyItemChanged(index);
+            scrollToBottom();
+            return;
+        }
+
+        if (mPendingUpdate != null) {
+            mMainHandler.removeCallbacks(mPendingUpdate);
+        }
+        final int pendingIndex = index;
+        long delay = UPDATE_THROTTLE_MS - elapsed;
+        mPendingUpdate = () -> {
+            mLastUpdateMs = System.currentTimeMillis();
+            mPendingUpdate = null;
+            if (pendingIndex < 0 || pendingIndex >= mMessages.size()) return;
+            mAdapter.notifyItemChanged(pendingIndex);
+            scrollToBottom();
+        };
+        mMainHandler.postDelayed(mPendingUpdate, Math.max(1L, delay));
+    }
+
+    private void clearPendingUpdate() {
+        if (mPendingUpdate == null) return;
+        mMainHandler.removeCallbacks(mPendingUpdate);
+        mPendingUpdate = null;
     }
 
     private void scrollToBottom() {
