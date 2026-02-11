@@ -56,17 +56,31 @@
             android:imeOptions="actionSend"
             android:textSize="15sp" />
 
-        <ImageButton
-            android:id="@+id/message_send"
+        <FrameLayout
             android:layout_width="44dp"
             android:layout_height="44dp"
-            android:src="@android:drawable/ic_menu_send"
-            android:contentDescription="发送"
-            android:background="@drawable/clawphones_button_outline_bg"
-            android:tint="@color/clawphones_accent"
-            android:layout_marginStart="8dp"
-            android:scaleType="centerInside"
-            android:padding="10dp" />
+            android:layout_marginStart="8dp">
+
+            <ImageButton
+                android:id="@+id/message_send"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/clawphones_button_outline_bg"
+                android:contentDescription="发送"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:src="@android:drawable/ic_menu_send"
+                android:tint="@color/clawphones_accent" />
+
+            <ProgressBar
+                android:id="@+id/message_send_progress"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:visibility="gone" />
+        </FrameLayout>
     </LinearLayout>
 
 </LinearLayout>

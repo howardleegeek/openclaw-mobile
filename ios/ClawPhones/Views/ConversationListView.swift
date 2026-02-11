@@ -5,11 +5,18 @@
 
 import SwiftUI
 import Combine
+import UIKit
 
 struct ConversationListView: View {
     @EnvironmentObject private var auth: AuthViewModel
     @StateObject private var viewModel = ConversationListViewModel()
     @State private var showNewChat: Bool = false
+
+    private static let monthDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M月d日"
+        return formatter
+    }()
 
     var body: some View {
         List {
@@ -20,12 +27,21 @@ struct ConversationListView: View {
                     NavigationLink {
                         ChatView(conversationId: conversation.id)
                     } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(conversation.title?.isEmpty == false ? conversation.title! : "Untitled")
-                                .font(.headline)
-                                .lineLimit(1)
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(conversation.title?.isEmpty == false ? conversation.title! : "Untitled")
+                                    .font(.headline)
+                                    .lineLimit(1)
 
-                            Text("\(conversation.messageCount) messages")
+                                Text(previewText(for: conversation))
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer(minLength: 0)
+
+                            Text(relativeTimeText(for: conversation))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -65,6 +81,8 @@ struct ConversationListView: View {
         .refreshable {
             if auth.isAuthenticated {
                 await viewModel.loadConversations()
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .clawPhonesConversationsDidChange)) { _ in
@@ -97,5 +115,44 @@ struct ConversationListView: View {
                 await viewModel.deleteConversation(id: id)
             }
         }
+    }
+
+    private func previewText(for conversation: ConversationSummary) -> String {
+        if let lastMessage = conversation.lastMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !lastMessage.isEmpty {
+            return lastMessage
+        }
+
+        if let title = conversation.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            return title
+        }
+
+        return "\(conversation.messageCount) messages"
+    }
+
+    private func relativeTimeText(for conversation: ConversationSummary) -> String {
+        let timestamp = conversation.updatedAt ?? conversation.createdAt
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        let now = Date()
+        let seconds = max(0, now.timeIntervalSince(date))
+
+        if seconds < 60 {
+            return "刚刚"
+        }
+
+        let minutes = Int(seconds / 60)
+        if minutes < 60 {
+            return "\(minutes)分钟前"
+        }
+
+        let hours = Int(seconds / 3600)
+        if Calendar.current.isDate(date, inSameDayAs: now), hours < 24 {
+            return "\(hours)小时前"
+        }
+
+        if Calendar.current.isDateInYesterday(date) {
+            return "昨天"
+        }
+
+        return Self.monthDayFormatter.string(from: date)
     }
 }

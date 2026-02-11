@@ -42,6 +42,7 @@ struct Conversation: Identifiable, Codable, Hashable {
 struct ConversationSummary: Identifiable, Codable, Hashable {
     let id: String
     let title: String?
+    let lastMessage: String?
     let createdAt: Int
     let updatedAt: Int?
     let messageCount: Int
@@ -49,6 +50,7 @@ struct ConversationSummary: Identifiable, Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id
         case title
+        case lastMessage = "last_message"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case messageCount = "message_count"

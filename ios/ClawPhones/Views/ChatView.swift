@@ -8,6 +8,20 @@ import SwiftUI
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @State private var inputText: String = ""
+    @State private var showCopiedToast: Bool = false
+    @State private var copiedToastTask: Task<Void, Never>?
+
+    private static let clockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let monthDayClockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d HH:mm"
+        return formatter
+    }()
 
     init(conversationId: String?) {
         _viewModel = StateObject(wrappedValue: ChatViewModel(conversationId: conversationId))
@@ -18,9 +32,11 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(viewModel.messages) { message in
+                        ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
                             MessageRow(
                                 message: message,
+                                timestampText: timestampText(for: index),
+                                onCopy: handleCopiedMessage,
                                 onRegenerate: message.role == .assistant ? {
                                     Task { await viewModel.regenerateAssistantMessage(messageId: message.id) }
                                 } : nil,
@@ -58,12 +74,29 @@ struct ChatView: View {
         }
         .navigationTitle(viewModel.conversationTitle?.isEmpty == false ? (viewModel.conversationTitle ?? "") : "Chat")
         .navigationBarTitleDisplayMode(.inline)
+        .overlay(alignment: .bottom) {
+            if showCopiedToast {
+                Text("已复制")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .background(Color.black.opacity(0.7))
+                    .clipShape(Capsule())
+                    .padding(.bottom, 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
         .task {
             if let cid = viewModel.conversationId {
                 await viewModel.loadConversation(id: cid)
             } else {
                 await viewModel.startNewConversation()
             }
+        }
+        .onDisappear {
+            copiedToastTask?.cancel()
         }
         .alert("Error", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -88,5 +121,54 @@ struct ChatView: View {
         } else {
             proxy.scrollTo(lastId, anchor: .bottom)
         }
+    }
+
+    private func handleCopiedMessage() {
+        copiedToastTask?.cancel()
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            showCopiedToast = true
+        }
+
+        copiedToastTask = Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                withAnimation(.easeIn(duration: 0.2)) {
+                    showCopiedToast = false
+                }
+            }
+        }
+    }
+
+    private func timestampText(for index: Int) -> String? {
+        guard viewModel.messages.indices.contains(index) else { return nil }
+
+        let current = messageDate(for: viewModel.messages[index])
+        if index > 0 {
+            let previous = messageDate(for: viewModel.messages[index - 1])
+            if current.timeIntervalSince(previous) <= 5 * 60 {
+                return nil
+            }
+        }
+
+        return formattedTimestamp(for: current)
+    }
+
+    private func formattedTimestamp(for date: Date) -> String {
+        if Calendar.current.isDateInToday(date) {
+            return Self.clockFormatter.string(from: date)
+        }
+
+        if Calendar.current.isDateInYesterday(date) {
+            return "昨天 \(Self.clockFormatter.string(from: date))"
+        }
+
+        return Self.monthDayClockFormatter.string(from: date)
+    }
+
+    private func messageDate(for message: Message) -> Date {
+        Date(timeIntervalSince1970: TimeInterval(message.createdAt))
     }
 }

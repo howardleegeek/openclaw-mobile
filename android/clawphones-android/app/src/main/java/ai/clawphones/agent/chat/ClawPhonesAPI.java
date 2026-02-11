@@ -8,16 +8,20 @@ import com.termux.shared.logger.Logger;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Minimal HTTP client for ClawPhones backend API.
@@ -147,20 +151,65 @@ public class ClawPhonesAPI {
     /** GET /v1/conversations -> list */
     public static List<ConversationSummary> listConversations(String token)
         throws IOException, ApiException, JSONException {
-        JSONObject resp = doGet(BASE_URL + "/v1/conversations", token);
-        JSONArray arr = resp.optJSONArray("conversations");
+        List<Map<String, Object>> maps = getConversations(token);
         List<ConversationSummary> out = new ArrayList<>();
+        for (Map<String, Object> map : maps) {
+            out.add(new ConversationSummary(
+                asString(map.get("id")),
+                asStringOrNull(map.get("title")),
+                asLong(map.get("created_at")),
+                asLong(map.get("updated_at")),
+                (int) asLong(map.get("message_count"))
+            ));
+        }
+        return out;
+    }
+
+    /** GET /v1/conversations -> [{id,title,created_at,updated_at,message_count}, ...] */
+    public static List<Map<String, Object>> getConversations(String token)
+        throws IOException, ApiException, JSONException {
+        Object resp = doGetAny(BASE_URL + "/v1/conversations", token);
+        JSONArray arr = extractArray(resp, "conversations");
+        List<Map<String, Object>> out = new ArrayList<>();
         if (arr == null) return out;
+
         for (int i = 0; i < arr.length(); i++) {
             JSONObject c = arr.optJSONObject(i);
             if (c == null) continue;
-            out.add(new ConversationSummary(
-                c.optString("id", ""),
-                c.isNull("title") ? null : c.optString("title", null),
-                c.optLong("created_at", 0),
-                c.optLong("updated_at", 0),
-                c.optInt("message_count", 0)
-            ));
+            HashMap<String, Object> row = new HashMap<>();
+            row.put("id", c.optString("id", ""));
+            row.put("title", c.isNull("title") ? null : c.optString("title", null));
+            row.put("created_at", c.optLong("created_at", 0));
+            row.put("updated_at", c.optLong("updated_at", 0));
+            row.put("message_count", c.optInt("message_count", 0));
+            out.add(row);
+        }
+        return out;
+    }
+
+    /** DELETE /v1/conversations/{id} -> 204 */
+    public static void deleteConversation(String token, String conversationId)
+        throws IOException, ApiException {
+        doDeleteNoContent(BASE_URL + "/v1/conversations/" + conversationId, token);
+    }
+
+    /** GET /v1/conversations/{id}/messages -> [{id,role,content,created_at}, ...] */
+    public static List<Map<String, Object>> getMessages(String token, String conversationId)
+        throws IOException, ApiException, JSONException {
+        Object resp = doGetAny(BASE_URL + "/v1/conversations/" + conversationId + "/messages", token);
+        JSONArray arr = extractArray(resp, "messages");
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (arr == null) return out;
+
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject msg = arr.optJSONObject(i);
+            if (msg == null) continue;
+            HashMap<String, Object> row = new HashMap<>();
+            row.put("id", msg.optString("id", ""));
+            row.put("role", msg.optString("role", ""));
+            row.put("content", msg.optString("content", ""));
+            row.put("created_at", msg.optLong("created_at", 0));
+            out.add(row);
         }
         return out;
     }
@@ -266,6 +315,11 @@ public class ClawPhonesAPI {
         return readResponse(conn);
     }
 
+    private static Object doGetAny(String urlStr, String token) throws IOException, ApiException, JSONException {
+        HttpURLConnection conn = openConnection(urlStr, "GET", token);
+        return readResponseAny(conn);
+    }
+
     private static JSONObject doPost(String urlStr, JSONObject body, String token) throws IOException, ApiException, JSONException {
         HttpURLConnection conn = openConnection(urlStr, "POST", token);
         conn.setRequestProperty("Content-Type", "application/json");
@@ -274,6 +328,21 @@ public class ClawPhonesAPI {
             os.write(body.toString().getBytes(StandardCharsets.UTF_8));
         }
         return readResponse(conn);
+    }
+
+    private static void doDeleteNoContent(String urlStr, String token) throws IOException, ApiException {
+        HttpURLConnection conn = openConnection(urlStr, "DELETE", token);
+        int code = conn.getResponseCode();
+        String raw = "";
+        try {
+            raw = readBody(conn, code);
+        } finally {
+            conn.disconnect();
+        }
+        if (code < 200 || code >= 300) {
+            Logger.logError(LOG_TAG, "API error " + code + ": " + raw);
+            throw new ApiException(code, raw.isEmpty() ? "HTTP " + code : raw);
+        }
     }
 
     private static HttpURLConnection openConnection(String urlStr, String method, String token) throws IOException {
@@ -290,41 +359,12 @@ public class ClawPhonesAPI {
 
     private static JSONObject readResponse(HttpURLConnection conn) throws IOException, ApiException, JSONException {
         int code = conn.getResponseCode();
-        StringBuilder sb = new StringBuilder();
-
+        String raw;
         try {
-            java.io.InputStream stream = null;
-            if (code >= 200 && code < 300) {
-                stream = conn.getInputStream();
-            } else {
-                stream = conn.getErrorStream();
-                if (stream == null) {
-                    // Some Android versions return null error stream.
-                    // Try getInputStream as a fallback (may also be null or throw).
-                    try {
-                        stream = conn.getInputStream();
-                    } catch (IOException ignored) {
-                        // Can't read error body — will use status code only
-                    }
-                }
-            }
-            if (stream != null) {
-                BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(stream, StandardCharsets.UTF_8));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    sb.append(line);
-                }
-                reader.close();
-            }
-        } catch (IOException e) {
-            if (code >= 200 && code < 300) throw e;
-            // For error responses, stream read failure is non-fatal
+            raw = readBody(conn, code);
         } finally {
             conn.disconnect();
         }
-
-        String raw = sb.toString();
         if (code < 200 || code >= 300) {
             Logger.logError(LOG_TAG, "API error " + code + ": " + raw);
             throw new ApiException(code, raw.isEmpty() ? "HTTP " + code : raw);
@@ -335,7 +375,60 @@ public class ClawPhonesAPI {
         return new JSONObject(raw);
     }
 
-    private static String readRawBody(java.io.InputStream stream) throws IOException {
+    private static Object readResponseAny(HttpURLConnection conn) throws IOException, ApiException, JSONException {
+        int code = conn.getResponseCode();
+        String raw;
+        try {
+            raw = readBody(conn, code);
+        } finally {
+            conn.disconnect();
+        }
+        if (code < 200 || code >= 300) {
+            Logger.logError(LOG_TAG, "API error " + code + ": " + raw);
+            throw new ApiException(code, raw.isEmpty() ? "HTTP " + code : raw);
+        }
+        if (raw.isEmpty()) {
+            return new JSONArray();
+        }
+        Object parsed = new JSONTokener(raw).nextValue();
+        if (parsed instanceof JSONObject || parsed instanceof JSONArray) {
+            return parsed;
+        }
+        throw new JSONException("Unexpected response type");
+    }
+
+    private static String readBody(HttpURLConnection conn, int code) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        try {
+            InputStream stream;
+            if (code >= 200 && code < 300) {
+                stream = conn.getInputStream();
+            } else {
+                stream = conn.getErrorStream();
+                if (stream == null) {
+                    try {
+                        stream = conn.getInputStream();
+                    } catch (IOException ignored) {
+                        stream = null;
+                    }
+                }
+            }
+            if (stream != null) {
+                try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            if (code >= 200 && code < 300) throw e;
+        }
+        return sb.toString();
+    }
+
+    private static String readRawBody(InputStream stream) throws IOException {
         if (stream == null) return "";
         StringBuilder sb = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
@@ -345,6 +438,37 @@ public class ClawPhonesAPI {
             }
         }
         return sb.toString();
+    }
+
+    private static JSONArray extractArray(Object resp, String key) {
+        if (resp instanceof JSONArray) {
+            return (JSONArray) resp;
+        }
+        if (resp instanceof JSONObject) {
+            return ((JSONObject) resp).optJSONArray(key);
+        }
+        return null;
+    }
+
+    private static String asString(Object v) {
+        if (v == null) return "";
+        return String.valueOf(v);
+    }
+
+    private static String asStringOrNull(Object v) {
+        if (v == null) return null;
+        String s = String.valueOf(v).trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    private static long asLong(Object v) {
+        if (v == null) return 0L;
+        if (v instanceof Number) return ((Number) v).longValue();
+        try {
+            return Long.parseLong(String.valueOf(v));
+        } catch (Exception ignored) {
+            return 0L;
+        }
     }
 
     // ── Response parsing ──────────────────────────────────────────────────────

@@ -2,21 +2,25 @@ package ai.clawphones.agent.chat;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Html;
 import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -28,13 +32,17 @@ import org.json.JSONException;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
  * In-app AI chat UI backed by ClawPhones API.
  *
- * Handles: conversation creation, message send/receive, 401 auto-logout,
+ * Handles: conversation create/resume, message send/receive, 401 auto-logout,
  * Markdown rendering, and graceful lifecycle management.
  */
 public class ChatActivity extends AppCompatActivity {
@@ -42,6 +50,7 @@ public class ChatActivity extends AppCompatActivity {
     private RecyclerView mRecycler;
     private EditText mInput;
     private ImageButton mSend;
+    private ProgressBar mSendProgress;
 
     private final ArrayList<ChatMessage> mMessages = new ArrayList<>();
     private ChatAdapter mAdapter;
@@ -56,6 +65,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private String mToken;
     private String mConversationId;
+    private String mLastUserText = "";
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -63,26 +73,32 @@ public class ChatActivity extends AppCompatActivity {
 
         mToken = ClawPhonesAPI.getToken(this);
         if (TextUtils.isEmpty(mToken)) {
-            startActivity(new Intent(this, LoginActivity.class));
-            finish();
+            redirectToLogin(null);
             return;
         }
 
         setContentView(R.layout.activity_chat);
 
-        // Setup toolbar with title and back navigation
         Toolbar toolbar = findViewById(R.id.chat_toolbar);
         if (toolbar != null) {
             setSupportActionBar(toolbar);
-            toolbar.setTitle("ClawPhones AI");
-            toolbar.setSubtitle("\u667a\u80fd\u52a9\u624b");
+            String title = safeTrim(getIntent().getStringExtra("title"));
+            toolbar.setTitle(TextUtils.isEmpty(title) ? "新对话" : title);
             toolbar.setNavigationIcon(android.R.drawable.ic_menu_revert);
             toolbar.setNavigationOnClickListener(v -> finish());
+
+            MenuItem logoutItem = toolbar.getMenu().add("退出登录");
+            logoutItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+            toolbar.setOnMenuItemClickListener(item -> {
+                confirmLogout();
+                return true;
+            });
         }
 
         mRecycler = findViewById(R.id.messages_recycler);
         mInput = findViewById(R.id.message_input);
         mSend = findViewById(R.id.message_send);
+        mSendProgress = findViewById(R.id.message_send_progress);
 
         mAdapter = new ChatAdapter(mMessages);
         LinearLayoutManager lm = new LinearLayoutManager(this);
@@ -92,12 +108,17 @@ public class ChatActivity extends AppCompatActivity {
 
         mExecutor = Executors.newSingleThreadExecutor();
 
-        addAssistantMessage("\u4f60\u597d\uff01\u6709\u4ec0\u4e48\u6211\u53ef\u4ee5\u5e2e\u4f60\u7684\u5417\uff1f");
-        createConversation();
+        String existingConversationId = safeTrim(getIntent().getStringExtra("conversation_id"));
+        if (!TextUtils.isEmpty(existingConversationId)) {
+            mConversationId = existingConversationId;
+            loadHistory(existingConversationId);
+        } else {
+            addAssistantMessage("你好！有什么我可以帮你的吗？");
+            createConversation();
+        }
 
         mSend.setOnClickListener(v -> onSend());
 
-        // Also send on keyboard Enter
         mInput.setOnEditorActionListener((v, actionId, event) -> {
             onSend();
             return true;
@@ -106,14 +127,13 @@ public class ChatActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        // CRITICAL: Set destroyed flag and shutdown executor BEFORE super.onDestroy()
-        // to prevent background threads from posting to a destroyed activity.
         mDestroyed = true;
         mMainHandler.removeCallbacksAndMessages(null);
         if (mExecutor != null) {
             try {
                 mExecutor.shutdownNow();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
             mExecutor = null;
         }
         super.onDestroy();
@@ -134,36 +154,41 @@ public class ChatActivity extends AppCompatActivity {
             try {
                 exec.execute(r);
             } catch (java.util.concurrent.RejectedExecutionException ignored) {
-                // Executor was shut down between null-check and execute()
             }
         }
     }
 
-    private void createConversation() {
-        if (mBusy) return;
+    private void loadHistory(String conversationId) {
+        if (TextUtils.isEmpty(conversationId)) return;
+
         mBusy = true;
         setInputEnabled(false);
 
-        final int idx = addAssistantMessage("\u6b63\u5728\u8fde\u63a5\u2026");
-
         execSafe(() -> {
             try {
-                String id = ClawPhonesAPI.createConversation(mToken);
-                runSafe(() -> {
-                    mConversationId = id;
-                    updateAssistantMessage(idx, "\u5df2\u8fde\u63a5\uff0c\u53ef\u4ee5\u5f00\u59cb\u63d0\u95ee\u3002");
-                    mBusy = false;
-                    setInputEnabled(true);
+                List<Map<String, Object>> rows = new ArrayList<>(
+                    ClawPhonesAPI.getMessages(mToken, conversationId));
+
+                Collections.sort(rows, new Comparator<Map<String, Object>>() {
+                    @Override
+                    public int compare(Map<String, Object> a, Map<String, Object> b) {
+                        return Long.compare(asLong(a.get("created_at")), asLong(b.get("created_at")));
+                    }
                 });
-            } catch (IOException e) {
+
                 runSafe(() -> {
-                    updateAssistantMessage(idx, "\u7f51\u7edc\u9519\u8bef: " + safeMsg(e));
-                    mBusy = false;
-                    setInputEnabled(true);
-                });
-            } catch (JSONException e) {
-                runSafe(() -> {
-                    updateAssistantMessage(idx, "\u6570\u636e\u89e3\u6790\u9519\u8bef");
+                    mMessages.clear();
+                    for (Map<String, Object> row : rows) {
+                        String role = asString(row.get("role"));
+                        String content = asString(row.get("content"));
+                        if (TextUtils.isEmpty(content)) continue;
+                        ChatMessage.Role messageRole = "user".equalsIgnoreCase(role)
+                            ? ChatMessage.Role.USER
+                            : ChatMessage.Role.ASSISTANT;
+                        mMessages.add(new ChatMessage(messageRole, content));
+                    }
+                    mAdapter.notifyDataSetChanged();
+                    scrollToBottom();
                     mBusy = false;
                     setInputEnabled(true);
                 });
@@ -171,10 +196,59 @@ public class ChatActivity extends AppCompatActivity {
                 runSafe(() -> {
                     if (e.statusCode == 401) {
                         ClawPhonesAPI.clearToken(ChatActivity.this);
-                        redirectToLogin("\u767b\u5f55\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55");
+                        redirectToLogin("登录已过期，请重新登录");
                         return;
                     }
-                    updateAssistantMessage(idx, "\u8fde\u63a5\u5931\u8d25: " + safeErr(e));
+                    toast("加载历史失败");
+                    mBusy = false;
+                    setInputEnabled(true);
+                });
+            } catch (IOException | JSONException e) {
+                runSafe(() -> {
+                    toast("加载历史失败");
+                    mBusy = false;
+                    setInputEnabled(true);
+                });
+            }
+        });
+    }
+
+    private void createConversation() {
+        if (mBusy) return;
+        mBusy = true;
+        setInputEnabled(false);
+
+        final int idx = addAssistantMessage("正在连接…");
+
+        execSafe(() -> {
+            try {
+                String id = ClawPhonesAPI.createConversation(mToken);
+                runSafe(() -> {
+                    mConversationId = id;
+                    updateAssistantMessage(idx, "已连接，可以开始提问。");
+                    mBusy = false;
+                    setInputEnabled(true);
+                });
+            } catch (IOException e) {
+                runSafe(() -> {
+                    updateAssistantMessage(idx, "网络错误: " + safeMsg(e));
+                    mBusy = false;
+                    setInputEnabled(true);
+                });
+            } catch (JSONException e) {
+                runSafe(() -> {
+                    updateAssistantMessage(idx, "数据解析错误");
+                    mBusy = false;
+                    setInputEnabled(true);
+                });
+            } catch (ClawPhonesAPI.ApiException e) {
+                runSafe(() -> {
+                    if (e.statusCode == 401) {
+                        ClawPhonesAPI.clearToken(ChatActivity.this);
+                        redirectToLogin("登录已过期，请重新登录");
+                        return;
+                    }
+                    updateAssistantMessage(idx, "连接失败: " + safeErr(e));
                     mBusy = false;
                     setInputEnabled(true);
                 });
@@ -189,17 +263,19 @@ public class ChatActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(text)) return;
 
         if (TextUtils.isEmpty(mConversationId)) {
-            toast("\u6b63\u5728\u521d\u59cb\u5316\u5bf9\u8bdd\uff0c\u8bf7\u7a0d\u7b49\u2026");
+            toast("正在初始化对话，请稍等…");
             return;
         }
 
+        mLastUserText = text;
         mInput.setText("");
         addUserMessage(text);
 
         mBusy = true;
         setInputEnabled(false);
+        setSendingState(true);
 
-        final int idx = addAssistantMessage("\u601d\u8003\u4e2d\u2026");
+        final int idx = addAssistantMessage("思考中...");
 
         execSafe(() -> {
             final StringBuilder accumulated = new StringBuilder();
@@ -222,6 +298,7 @@ public class ChatActivity extends AppCompatActivity {
                         updateAssistantMessage(idx, finalContent);
                         mBusy = false;
                         setInputEnabled(true);
+                        setSendingState(false);
                     });
                 }
 
@@ -232,33 +309,43 @@ public class ChatActivity extends AppCompatActivity {
                         if (error instanceof ClawPhonesAPI.ApiException
                             && ((ClawPhonesAPI.ApiException) error).statusCode == 401) {
                             ClawPhonesAPI.clearToken(ChatActivity.this);
-                            redirectToLogin("\u767b\u5f55\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55");
+                            redirectToLogin("登录已过期，请重新登录");
                             return;
                         }
 
                         String partial = accumulated.toString();
                         if (!partial.isEmpty()) {
-                            updateAssistantMessage(idx, partial + "\n\n\u26a0 \u8fde\u63a5\u4e2d\u65ad");
-                        } else if (error instanceof ClawPhonesAPI.ApiException) {
-                            updateAssistantMessage(idx, "\u8bf7\u6c42\u5931\u8d25: " + safeErr((ClawPhonesAPI.ApiException) error));
-                        } else if (error instanceof JSONException) {
-                            updateAssistantMessage(idx, "\u6570\u636e\u89e3\u6790\u9519\u8bef");
-                        } else if (error instanceof IOException) {
-                            updateAssistantMessage(idx, "\u7f51\u7edc\u9519\u8bef: " + safeMsg(error));
+                            updateAssistantMessage(idx, partial + "\n\n⚠️ 连接中断");
                         } else {
-                            updateAssistantMessage(idx, "\u8bf7\u6c42\u5931\u8d25: " + safeMsg(error));
+                            updateAssistantMessage(idx, "⚠️ 发送失败");
                         }
                         mBusy = false;
                         setInputEnabled(true);
+                        setSendingState(false);
                     });
                 }
             });
         });
     }
 
-    private void redirectToLogin(String message) {
-        toast(message);
-        startActivity(new Intent(this, LoginActivity.class));
+    private void confirmLogout() {
+        new AlertDialog.Builder(this)
+            .setMessage("确定退出登录吗？")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("退出", (d, w) -> {
+                ClawPhonesAPI.clearToken(ChatActivity.this);
+                redirectToLogin(null);
+            })
+            .show();
+    }
+
+    private void redirectToLogin(@Nullable String message) {
+        if (!TextUtils.isEmpty(message)) {
+            toast(message);
+        }
+        Intent i = new Intent(this, LoginActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(i);
         finish();
     }
 
@@ -269,7 +356,16 @@ public class ChatActivity extends AppCompatActivity {
         }
         if (mSend != null) {
             mSend.setEnabled(enabled);
-            mSend.setAlpha(enabled ? 1.0f : 0.6f);
+            mSend.setAlpha(enabled ? 1.0f : 0.5f);
+        }
+    }
+
+    private void setSendingState(boolean sending) {
+        if (mSend != null) {
+            mSend.setVisibility(sending ? View.INVISIBLE : View.VISIBLE);
+        }
+        if (mSendProgress != null) {
+            mSendProgress.setVisibility(sending ? View.VISIBLE : View.GONE);
         }
     }
 
@@ -353,25 +449,38 @@ public class ChatActivity extends AppCompatActivity {
 
     private static String safeMsg(Exception e) {
         String msg = e.getMessage();
-        if (msg == null || msg.trim().isEmpty()) return "\u672a\u77e5\u9519\u8bef";
-        if (msg.length() > 200) msg = msg.substring(0, 200) + "\u2026";
+        if (msg == null || msg.trim().isEmpty()) return "未知错误";
+        if (msg.length() > 200) msg = msg.substring(0, 200) + "…";
         return msg;
     }
 
     private static String safeErr(ClawPhonesAPI.ApiException e) {
         String msg = e.getMessage();
         if (msg == null || msg.trim().isEmpty()) return "HTTP " + e.statusCode;
-        // Try to extract "detail" from JSON error body
         try {
             org.json.JSONObject errJson = new org.json.JSONObject(msg);
             String detail = errJson.optString("detail", null);
             if (detail != null && !detail.trim().isEmpty()) return detail;
-        } catch (Exception ignored) {}
-        if (msg.length() > 200) msg = msg.substring(0, 200) + "\u2026";
+        } catch (Exception ignored) {
+        }
+        if (msg.length() > 200) msg = msg.substring(0, 200) + "…";
         return msg;
     }
 
-    // ── Data model ─────────────────────────────────────────────────────────────
+    private static String asString(Object value) {
+        if (value == null) return "";
+        return String.valueOf(value);
+    }
+
+    private static long asLong(Object value) {
+        if (value == null) return 0L;
+        if (value instanceof Number) return ((Number) value).longValue();
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
 
     static final class ChatMessage {
         enum Role { USER, ASSISTANT }
@@ -384,8 +493,6 @@ public class ChatActivity extends AppCompatActivity {
             this.text = text;
         }
     }
-
-    // ── RecyclerView Adapter ───────────────────────────────────────────────────
 
     static final class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.VH> {
         private static final int TYPE_AI = 0;
@@ -415,7 +522,8 @@ public class ChatActivity extends AppCompatActivity {
         public void onBindViewHolder(@NonNull VH holder, int position) {
             ChatMessage m = messages.get(position);
             boolean isUser = m.role == ChatMessage.Role.USER;
-            holder.bind(m.text, isUser);
+            boolean isThinking = !isUser && "思考中...".equals(m.text);
+            holder.bind(m.text, isUser, isThinking);
         }
 
         @Override
@@ -436,11 +544,17 @@ public class ChatActivity extends AppCompatActivity {
                 }
             }
 
-            void bind(String markdown, boolean isUser) {
+            void bind(String markdown, boolean isUser, boolean isThinking) {
                 if (text != null) {
-                    text.setText(renderMarkdown(markdown));
-                    // White text on user blue bubble, cream on assistant dark bubble
-                    text.setTextColor(isUser ? Color.WHITE : 0xFFF5F0E6);
+                    if (isThinking) {
+                        text.setText("思考中...");
+                        text.setTypeface(null, Typeface.ITALIC);
+                        text.setTextColor(0xFF888888);
+                    } else {
+                        text.setText(renderMarkdown(markdown));
+                        text.setTypeface(null, Typeface.NORMAL);
+                        text.setTextColor(isUser ? Color.WHITE : 0xFFF5F0E6);
+                    }
                 }
                 if (bubble != null) {
                     android.widget.FrameLayout.LayoutParams lp =
@@ -463,29 +577,20 @@ public class ChatActivity extends AppCompatActivity {
          */
         private static CharSequence renderMarkdown(String markdown) {
             if (markdown == null) markdown = "";
-            // Limit input length to prevent regex DoS
             if (markdown.length() > 50_000) {
-                markdown = markdown.substring(0, 50_000) + "\u2026";
+                markdown = markdown.substring(0, 50_000) + "…";
             }
             try {
                 String html = TextUtils.htmlEncode(markdown);
-                // Code blocks (triple backtick -> <pre>) — bounded: max 10K chars inside
                 html = html.replaceAll("```([^`]{0,10000})```", "<pre>$1</pre>");
-                // Inline code — bounded: max 500 chars inside
                 html = html.replaceAll("`([^`]{1,500})`", "<tt><b>$1</b></tt>");
-                // Bold — bounded: max 500 chars inside
                 html = html.replaceAll("\\*\\*([^*]{1,500})\\*\\*", "<b>$1</b>");
-                // Italic — bounded: max 500 chars inside
                 html = html.replaceAll("(?<!\\*)\\*([^*]{1,500})\\*(?!\\*)", "<i>$1</i>");
-                // Links — bounded: max 200 chars each part
                 html = html.replaceAll("\\[([^\\]]{1,200})\\]\\((https?://[^\\)]{1,500})\\)", "<a href=\"$2\">$1</a>");
-                // Bullet points (- item)
-                html = html.replaceAll("(?m)^- (.+)", "\u2022 $1");
-                // Newlines
+                html = html.replaceAll("(?m)^- (.+)", "• $1");
                 html = html.replace("\n", "<br/>");
                 return Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY);
             } catch (Exception e) {
-                // Fallback: plain text if rendering fails
                 return markdown;
             }
         }

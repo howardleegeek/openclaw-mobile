@@ -44,7 +44,7 @@ public class LoginActivity extends AppCompatActivity {
         // If we already have a token, skip login.
         String existing = ClawPhonesAPI.getToken(this);
         if (!TextUtils.isEmpty(existing)) {
-            openChatAndFinish();
+            openConversationListAndFinish();
             return;
         }
 
@@ -114,7 +114,10 @@ public class LoginActivity extends AppCompatActivity {
         setBusy(true);
 
         ExecutorService exec = mExecutor;
-        if (exec == null || exec.isShutdown()) return;
+        if (exec == null || exec.isShutdown()) {
+            setBusy(false);
+            return;
+        }
 
         try {
             exec.execute(() -> {
@@ -127,7 +130,7 @@ public class LoginActivity extends AppCompatActivity {
                     }
                     ClawPhonesAPI.saveToken(LoginActivity.this, token);
                     if (!mDestroyed) {
-                        runOnUiThread(this::openChatAndFinish);
+                        runOnUiThread(this::openConversationListAndFinish);
                     }
                 } catch (IOException | JSONException e) {
                     if (!mDestroyed) {
@@ -160,8 +163,8 @@ public class LoginActivity extends AppCompatActivity {
         }
     }
 
-    private void openChatAndFinish() {
-        startActivity(new Intent(this, ChatActivity.class));
+    private void openConversationListAndFinish() {
+        startActivity(new Intent(this, ConversationListActivity.class));
         finish();
     }
 
@@ -169,12 +172,19 @@ public class LoginActivity extends AppCompatActivity {
         if (mSubmitButton != null) {
             mSubmitButton.setEnabled(!busy);
             mSubmitButton.setAlpha(busy ? 0.6f : 1.0f);
-            mSubmitButton.setText(busy ? "\u8bf7\u7a0d\u5019\u2026" : (mRegisterMode ? "\u6ce8\u518c" : "\u767b\u5f55"));
+            if (busy) {
+                mSubmitButton.setText(mRegisterMode ? "注册中..." : "登录中...");
+            } else {
+                mSubmitButton.setText(mRegisterMode ? "\u6ce8\u518c" : "\u767b\u5f55");
+            }
         }
         if (mToggle != null) {
             mToggle.setEnabled(!busy);
             mToggle.setAlpha(busy ? 0.6f : 1.0f);
         }
+        if (mEmail != null) mEmail.setEnabled(!busy);
+        if (mPassword != null) mPassword.setEnabled(!busy);
+        if (mName != null) mName.setEnabled(!busy);
     }
 
     private void toast(String s) {
