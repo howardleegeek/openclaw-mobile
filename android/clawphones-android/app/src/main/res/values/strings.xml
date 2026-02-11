@@ -277,6 +277,17 @@
     <string name="chat_dialog_logout_confirm">确定退出登录吗？</string>
     <string name="chat_action_cancel">取消</string>
     <string name="chat_action_logout">退出</string>
+    <string name="chat_action_hold_to_talk">按住说话</string>
+    <string name="chat_speech_not_supported">这台设备不支持语音识别，你可以直接打字。</string>
+    <string name="chat_speech_need_permission">需要麦克风权限才能语音输入</string>
+    <string name="chat_speech_permission_granted">麦克风权限已开启，按住麦克风开始说话。</string>
+    <string name="chat_speech_state_idle">按住说话</string>
+    <string name="chat_speech_state_listening">录音中…</string>
+    <string name="chat_speech_state_processing">识别中…</string>
+    <string name="chat_speech_state_done">识别完成</string>
+    <string name="chat_speech_status_recording_partial">录音中：%1$s</string>
+    <string name="chat_speech_status_done">识别完成</string>
+    <string name="chat_speech_error_no_match">没有识别到语音，请再试一次</string>
     <string name="chat_error_unknown">未知错误</string>
 
 

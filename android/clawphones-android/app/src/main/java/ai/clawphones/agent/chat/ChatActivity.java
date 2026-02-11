@@ -1,6 +1,11 @@
 package ai.clawphones.agent.chat;
 
+import android.Manifest;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -10,8 +15,10 @@ import android.text.Html;
 import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
@@ -23,6 +30,8 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -35,6 +44,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -51,7 +61,10 @@ public class ChatActivity extends AppCompatActivity {
 
     private RecyclerView mRecycler;
     private EditText mInput;
+    private TextView mSpeechStatus;
     private ImageButton mSend;
+    private ImageButton mMic;
+    private View mMicPulse;
     private ProgressBar mSendProgress;
 
     private final ArrayList<ChatMessage> mMessages = new ArrayList<>();
@@ -64,10 +77,23 @@ public class ChatActivity extends AppCompatActivity {
     private long mLastUpdateMs = 0L;
     @Nullable private Runnable mPendingUpdate = null;
     private static final long UPDATE_THROTTLE_MS = 50L;
+    private static final long SPEECH_DONE_RESET_MS = 1_200L;
+    private static final int REQUEST_RECORD_AUDIO = 7021;
+
+    private enum SpeechUiState {
+        IDLE,
+        LISTENING,
+        PROCESSING,
+        DONE
+    }
 
     private String mToken;
     private String mConversationId;
     private String mLastUserText = "";
+    @Nullable private SpeechHelper mSpeechHelper;
+    @Nullable private AnimatorSet mMicPulseAnimator;
+    @Nullable private Runnable mPendingSpeechIdleReset = null;
+    @NonNull private SpeechUiState mSpeechUiState = SpeechUiState.IDLE;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -99,6 +125,9 @@ public class ChatActivity extends AppCompatActivity {
 
         mRecycler = findViewById(R.id.messages_recycler);
         mInput = findViewById(R.id.message_input);
+        mSpeechStatus = findViewById(R.id.speech_status);
+        mMic = findViewById(R.id.message_mic);
+        mMicPulse = findViewById(R.id.message_mic_pulse);
         mSend = findViewById(R.id.message_send);
         mSendProgress = findViewById(R.id.message_send_progress);
 
@@ -120,6 +149,7 @@ public class ChatActivity extends AppCompatActivity {
         }
 
         mSend.setOnClickListener(v -> onSend());
+        initSpeechInput();
 
         mInput.setOnEditorActionListener((v, actionId, event) -> {
             onSend();
@@ -130,6 +160,12 @@ public class ChatActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         mDestroyed = true;
+        clearPendingSpeechIdleReset();
+        stopMicPulseAnimation();
+        if (mSpeechHelper != null) {
+            mSpeechHelper.release();
+            mSpeechHelper = null;
+        }
         mMainHandler.removeCallbacksAndMessages(null);
         if (mExecutor != null) {
             try {
@@ -139,6 +175,24 @@ public class ChatActivity extends AppCompatActivity {
             mExecutor = null;
         }
         super.onDestroy();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_RECORD_AUDIO) return;
+
+        boolean granted = grantResults.length > 0
+            && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        if (granted) {
+            setSpeechUiState(SpeechUiState.IDLE, null);
+            toast(getString(R.string.chat_speech_permission_granted));
+        } else {
+            setSpeechUiState(SpeechUiState.IDLE, null);
+            setSpeechStatus(getString(R.string.chat_speech_need_permission), false);
+            toast(getString(R.string.chat_speech_need_permission));
+        }
     }
 
     /** Post to UI thread safely — skips if activity is destroyed. */
@@ -368,9 +422,17 @@ public class ChatActivity extends AppCompatActivity {
             mInput.setEnabled(enabled);
             mInput.setAlpha(enabled ? 1.0f : 0.6f);
         }
+        if (mMic != null) {
+            mMic.setEnabled(enabled);
+            mMic.setAlpha(enabled ? 1.0f : 0.5f);
+        }
         if (mSend != null) {
             mSend.setEnabled(enabled);
             mSend.setAlpha(enabled ? 1.0f : 0.5f);
+        }
+        if (!enabled && mSpeechHelper != null) {
+            mSpeechHelper.cancelListening();
+            setSpeechUiState(SpeechUiState.IDLE, null);
         }
     }
 
@@ -380,6 +442,226 @@ public class ChatActivity extends AppCompatActivity {
         }
         if (mSendProgress != null) {
             mSendProgress.setVisibility(sending ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void initSpeechInput() {
+        if (mMic == null) return;
+
+        mSpeechHelper = new SpeechHelper(this, new SpeechHelper.Callback() {
+            @Override
+            public void onStatus(@NonNull String status, boolean active) {
+                runSafe(() -> {
+                    if (!active) return;
+                    if (status.contains("识别")) {
+                        setSpeechUiState(SpeechUiState.PROCESSING, null);
+                    } else {
+                        setSpeechUiState(SpeechUiState.LISTENING, null);
+                    }
+                });
+            }
+
+            @Override
+            public void onPartialText(@NonNull String text) {
+                runSafe(() -> setSpeechUiState(SpeechUiState.LISTENING, text));
+            }
+
+            @Override
+            public void onFinalText(@NonNull String text) {
+                runSafe(() -> applyRecognizedText(text));
+            }
+
+            @Override
+            public void onError(@NonNull String message) {
+                runSafe(() -> {
+                    setSpeechUiState(SpeechUiState.IDLE, null);
+                    setSpeechStatus(message, false);
+                });
+            }
+        });
+
+        if (mSpeechHelper == null || !mSpeechHelper.isRecognitionAvailable()) {
+            mMic.setEnabled(false);
+            mMic.setAlpha(0.5f);
+            setSpeechStatus(getString(R.string.chat_speech_not_supported), false);
+            stopMicPulseAnimation();
+            return;
+        }
+
+        setSpeechUiState(SpeechUiState.IDLE, null);
+
+        mMic.setOnTouchListener((v, event) -> {
+            if (mBusy) return true;
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                if (!hasRecordPermission()) {
+                    ActivityCompat.requestPermissions(
+                        ChatActivity.this,
+                        new String[]{Manifest.permission.RECORD_AUDIO},
+                        REQUEST_RECORD_AUDIO
+                    );
+                    setSpeechUiState(SpeechUiState.IDLE, null);
+                    setSpeechStatus(getString(R.string.chat_speech_need_permission), false);
+                    return true;
+                }
+                if (mSpeechHelper != null) {
+                    mSpeechHelper.startListening(Locale.getDefault());
+                    setSpeechUiState(SpeechUiState.LISTENING, null);
+                }
+                return true;
+            }
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                if (mSpeechHelper != null) {
+                    mSpeechHelper.stopListening();
+                    setSpeechUiState(SpeechUiState.PROCESSING, null);
+                }
+                v.performClick();
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private boolean hasRecordPermission() {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void applyRecognizedText(@NonNull String text) {
+        String recognized = safeTrim(text);
+        if (TextUtils.isEmpty(recognized)) {
+            setSpeechUiState(SpeechUiState.IDLE, null);
+            setSpeechStatus(getString(R.string.chat_speech_error_no_match), false);
+            return;
+        }
+        mInput.setText(recognized);
+        mInput.setSelection(recognized.length());
+        setSpeechUiState(SpeechUiState.DONE, null);
+    }
+
+    private void setSpeechStatus(@NonNull String text, boolean active) {
+        if (mSpeechStatus == null) return;
+        if (TextUtils.isEmpty(text)) {
+            mSpeechStatus.setVisibility(View.GONE);
+            return;
+        }
+        mSpeechStatus.setText(text);
+        mSpeechStatus.setVisibility(View.VISIBLE);
+        mSpeechStatus.setTextColor(active
+            ? ContextCompat.getColor(this, R.color.clawphones_accent)
+            : ContextCompat.getColor(this, R.color.clawphones_secondary_text));
+    }
+
+    private void setSpeechUiState(@NonNull SpeechUiState state, @Nullable String partialText) {
+        clearPendingSpeechIdleReset();
+        mSpeechUiState = state;
+        updateMicVisualState();
+
+        switch (state) {
+            case IDLE:
+                setSpeechStatus(getString(R.string.chat_speech_state_idle), false);
+                break;
+            case LISTENING:
+                if (!TextUtils.isEmpty(partialText)) {
+                    setSpeechStatus(getString(R.string.chat_speech_status_recording_partial, partialText), true);
+                } else {
+                    setSpeechStatus(getString(R.string.chat_speech_state_listening), true);
+                }
+                break;
+            case PROCESSING:
+                setSpeechStatus(getString(R.string.chat_speech_state_processing), true);
+                break;
+            case DONE:
+                setSpeechStatus(getString(R.string.chat_speech_state_done), true);
+                mPendingSpeechIdleReset = () -> {
+                    if (mSpeechUiState == SpeechUiState.DONE) {
+                        setSpeechUiState(SpeechUiState.IDLE, null);
+                    }
+                };
+                mMainHandler.postDelayed(mPendingSpeechIdleReset, SPEECH_DONE_RESET_MS);
+                break;
+        }
+    }
+
+    private void clearPendingSpeechIdleReset() {
+        if (mPendingSpeechIdleReset == null) return;
+        mMainHandler.removeCallbacks(mPendingSpeechIdleReset);
+        mPendingSpeechIdleReset = null;
+    }
+
+    private void updateMicVisualState() {
+        if (mMic == null) return;
+
+        mMic.animate().cancel();
+        switch (mSpeechUiState) {
+            case LISTENING:
+                mMic.setBackgroundResource(R.drawable.clawphones_button_bg);
+                mMic.setColorFilter(ContextCompat.getColor(this, R.color.clawphones_background));
+                mMic.animate().scaleX(1.06f).scaleY(1.06f).setDuration(120L).start();
+                mMic.setElevation(10f);
+                startMicPulseAnimation();
+                break;
+            case PROCESSING:
+                mMic.setBackgroundResource(R.drawable.clawphones_button_outline_bg);
+                mMic.setColorFilter(ContextCompat.getColor(this, R.color.clawphones_accent));
+                mMic.animate().scaleX(1.03f).scaleY(1.03f).setDuration(120L).start();
+                mMic.setElevation(6f);
+                stopMicPulseAnimation();
+                break;
+            case DONE:
+                mMic.setBackgroundResource(R.drawable.clawphones_button_outline_bg);
+                mMic.setColorFilter(ContextCompat.getColor(this, R.color.clawphones_accent));
+                mMic.animate().scaleX(1.02f).scaleY(1.02f).setDuration(120L).start();
+                mMic.setElevation(2f);
+                stopMicPulseAnimation();
+                break;
+            case IDLE:
+            default:
+                mMic.setBackgroundResource(R.drawable.clawphones_button_outline_bg);
+                mMic.setColorFilter(ContextCompat.getColor(this, R.color.clawphones_accent));
+                mMic.animate().scaleX(1f).scaleY(1f).setDuration(120L).start();
+                mMic.setElevation(0f);
+                stopMicPulseAnimation();
+                break;
+        }
+    }
+
+    private void startMicPulseAnimation() {
+        if (mMicPulse == null) return;
+        if (mMicPulseAnimator != null && mMicPulseAnimator.isRunning()) return;
+
+        mMicPulse.setVisibility(View.VISIBLE);
+        mMicPulse.setAlpha(0.28f);
+        mMicPulse.setScaleX(1f);
+        mMicPulse.setScaleY(1f);
+
+        ObjectAnimator scaleX = ObjectAnimator.ofFloat(mMicPulse, View.SCALE_X, 1f, 1.3f);
+        ObjectAnimator scaleY = ObjectAnimator.ofFloat(mMicPulse, View.SCALE_Y, 1f, 1.3f);
+        ObjectAnimator alpha = ObjectAnimator.ofFloat(mMicPulse, View.ALPHA, 0.28f, 0f);
+        scaleX.setRepeatCount(ValueAnimator.INFINITE);
+        scaleY.setRepeatCount(ValueAnimator.INFINITE);
+        alpha.setRepeatCount(ValueAnimator.INFINITE);
+        scaleX.setRepeatMode(ValueAnimator.RESTART);
+        scaleY.setRepeatMode(ValueAnimator.RESTART);
+        alpha.setRepeatMode(ValueAnimator.RESTART);
+
+        mMicPulseAnimator = new AnimatorSet();
+        mMicPulseAnimator.setDuration(900L);
+        mMicPulseAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
+        mMicPulseAnimator.playTogether(scaleX, scaleY, alpha);
+        mMicPulseAnimator.start();
+    }
+
+    private void stopMicPulseAnimation() {
+        if (mMicPulseAnimator != null) {
+            mMicPulseAnimator.cancel();
+            mMicPulseAnimator = null;
+        }
+        if (mMicPulse != null) {
+            mMicPulse.setVisibility(View.INVISIBLE);
+            mMicPulse.setAlpha(0f);
+            mMicPulse.setScaleX(1f);
+            mMicPulse.setScaleY(1f);
         }
     }
 

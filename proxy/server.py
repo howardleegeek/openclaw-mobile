@@ -106,6 +106,13 @@ LISTEN_HOST = os.getenv("LISTEN_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.getenv("LISTEN_PORT", "8080"))
 MOCK_MODE = os.getenv("MOCK_MODE", "").strip() in ("1", "true", "yes", "on")
 
+FCM_PROJECT_ID = os.getenv("FCM_PROJECT_ID", "").strip()
+FCM_ACCESS_TOKEN = os.getenv("FCM_ACCESS_TOKEN", "").strip()
+
+APNS_AUTH_TOKEN = os.getenv("APNS_AUTH_TOKEN", "").strip()
+APNS_TOPIC = os.getenv("APNS_TOPIC", "").strip()
+APNS_USE_SANDBOX = os.getenv("APNS_USE_SANDBOX", "").strip().lower() in ("1", "true", "yes", "on")
+
 
 TIER_LEVEL = {"free": 0, "pro": 1, "max": 2}
 LEVEL_TIER = {0: "free", 1: "pro", 2: "max"}
@@ -330,6 +337,17 @@ async def _init_db() -> None:
             )
             """
         )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS push_tokens (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id TEXT NOT NULL REFERENCES users(id),
+              platform TEXT NOT NULL CHECK (platform IN ('ios','android')),
+              push_token TEXT NOT NULL,
+              created_at INTEGER NOT NULL
+            )
+            """
+        )
         # Migration for existing DBs: add user_id to device_tokens.
         try:
             await db.execute("ALTER TABLE device_tokens ADD COLUMN user_id TEXT REFERENCES users(id)")
@@ -402,6 +420,8 @@ async def _init_db() -> None:
         )
         await db.execute("CREATE INDEX IF NOT EXISTS idx_crash_reports_status ON crash_reports(status, created_at)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens(user_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_push_tokens_user_id ON push_tokens(user_id)")
+        await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_push_tokens_platform_token ON push_tokens(platform, push_token)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
         await db.commit()
 
@@ -1259,6 +1279,56 @@ async def user_put_ai_config(request: Request) -> Any:
     return {"ai_config": ai_config, "personas": list(PERSONA_PROMPTS.keys()) + ["custom"]}
 
 
+@app.post("/v1/user/push-token")
+async def user_register_push_token(request: Request) -> Any:
+    _, user = await _require_user(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="request body must be valid JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    platform = str(body.get("platform") or "").strip().lower()
+    push_token = str(body.get("push_token") or "").strip()
+
+    if platform not in ("ios", "android"):
+        raise HTTPException(status_code=400, detail="platform must be 'ios' or 'android'")
+    if not push_token:
+        raise HTTPException(status_code=400, detail="push_token required")
+    if len(push_token) > 2048:
+        raise HTTPException(status_code=400, detail="push_token too long")
+
+    now = int(time.time())
+    user_id = str(user["id"])
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO push_tokens(user_id, platform, push_token, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(platform, push_token)
+            DO UPDATE SET user_id=excluded.user_id, created_at=excluded.created_at
+            """,
+            (user_id, platform, push_token, now),
+        )
+        await db.commit()
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, created_at FROM push_tokens WHERE platform=? AND push_token=?",
+            (platform, push_token),
+        ) as cur:
+            row = await cur.fetchone()
+
+    return {
+        "registered": True,
+        "id": int(row["id"]) if row else None,
+        "user_id": user_id,
+        "platform": platform,
+        "created_at": int(row["created_at"]) if row else now,
+    }
+
+
 async def _call_llm(
     *,
     token: str,
@@ -1966,6 +2036,156 @@ async def delete_conversation(conversation_id: str, request: Request) -> Any:
     return {"deleted": True}
 
 
+async def _send_apns_notification(push_token: str, title: str, body: str) -> Dict[str, Any]:
+    if not APNS_AUTH_TOKEN:
+        return {"ok": False, "error": "APNS_AUTH_TOKEN not configured"}
+    if not APNS_TOPIC:
+        return {"ok": False, "error": "APNS_TOPIC not configured"}
+
+    host = "api.sandbox.push.apple.com" if APNS_USE_SANDBOX else "api.push.apple.com"
+    url = f"https://{host}/3/device/{push_token}"
+    headers = {
+        "authorization": f"bearer {APNS_AUTH_TOKEN}",
+        "apns-topic": APNS_TOPIC,
+        "apns-push-type": "alert",
+        "apns-priority": "10",
+        "content-type": "application/json",
+    }
+    payload = {
+        "aps": {
+            "alert": {"title": title, "body": body},
+            "sound": "default",
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+    except Exception as e:
+        return {"ok": False, "error": f"apns request failed: {e}"}
+
+    if 200 <= resp.status_code < 300:
+        return {"ok": True, "status_code": resp.status_code}
+
+    reason = None
+    details: Any = None
+    try:
+        details = resp.json()
+        if isinstance(details, dict):
+            reason = details.get("reason")
+    except Exception:
+        details = None
+    if details is None:
+        details = (resp.text or "")[:500]
+
+    return {
+        "ok": False,
+        "status_code": resp.status_code,
+        "reason": reason,
+        "error": "apns rejected push",
+        "details": details,
+    }
+
+
+async def _send_fcm_notification(push_token: str, title: str, body: str) -> Dict[str, Any]:
+    if not FCM_PROJECT_ID:
+        return {"ok": False, "error": "FCM_PROJECT_ID not configured"}
+    if not FCM_ACCESS_TOKEN:
+        return {"ok": False, "error": "FCM_ACCESS_TOKEN not configured"}
+
+    url = f"https://fcm.googleapis.com/v1/projects/{FCM_PROJECT_ID}/messages:send"
+    headers = {
+        "authorization": f"Bearer {FCM_ACCESS_TOKEN}",
+        "content-type": "application/json; charset=utf-8",
+    }
+    payload = {
+        "message": {
+            "token": push_token,
+            "notification": {"title": title, "body": body},
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+    except Exception as e:
+        return {"ok": False, "error": f"fcm request failed: {e}"}
+
+    if 200 <= resp.status_code < 300:
+        response_body: Any = None
+        try:
+            response_body = resp.json()
+        except Exception:
+            response_body = (resp.text or "")[:500]
+        return {"ok": True, "status_code": resp.status_code, "details": response_body}
+
+    details: Any = None
+    try:
+        details = resp.json()
+    except Exception:
+        details = (resp.text or "")[:500]
+    return {
+        "ok": False,
+        "status_code": resp.status_code,
+        "error": "fcm rejected push",
+        "details": details,
+    }
+
+
+async def send_push(user_id: str, title: str, body: str) -> Dict[str, Any]:
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, platform, push_token FROM push_tokens WHERE user_id=? ORDER BY id DESC",
+            (str(user_id),),
+        ) as cur:
+            token_rows = await cur.fetchall()
+
+    if not token_rows:
+        return {"total": 0, "sent": 0, "failed": 0, "results": []}
+
+    results: List[Dict[str, Any]] = []
+    invalid_row_ids: List[int] = []
+    apns_invalid_reasons = {
+        "BadDeviceToken",
+        "DeviceTokenNotForTopic",
+        "Unregistered",
+    }
+
+    for row in token_rows:
+        row_id = int(row["id"])
+        platform = str(row["platform"])
+        push_token = str(row["push_token"])
+
+        if platform == "ios":
+            send_result = await _send_apns_notification(push_token, title, body)
+            reason = send_result.get("reason")
+            if isinstance(reason, str) and reason in apns_invalid_reasons:
+                invalid_row_ids.append(row_id)
+            if int(send_result.get("status_code") or 0) == 410:
+                invalid_row_ids.append(row_id)
+        elif platform == "android":
+            send_result = await _send_fcm_notification(push_token, title, body)
+            details_text = json.dumps(send_result.get("details"), ensure_ascii=False)
+            if ("UNREGISTERED" in details_text) or ("registration-token-not-registered" in details_text):
+                invalid_row_ids.append(row_id)
+        else:
+            send_result = {"ok": False, "error": f"unsupported platform: {platform}"}
+
+        results.append({"id": row_id, "platform": platform, **send_result})
+
+    if invalid_row_ids:
+        dedup_ids = sorted(set(invalid_row_ids))
+        placeholders = ",".join(["?"] * len(dedup_ids))
+        async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+            await db.execute(f"DELETE FROM push_tokens WHERE id IN ({placeholders})", tuple(dedup_ids))
+            await db.commit()
+
+    sent = sum(1 for r in results if bool(r.get("ok")))
+    failed = len(results) - sent
+    return {"total": len(results), "sent": sent, "failed": failed, "results": results}
+
+
 def _admin_check(x_admin_key: Optional[str]) -> None:
     if not ADMIN_KEY:
         raise HTTPException(status_code=404, detail="admin disabled")
@@ -2033,6 +2253,49 @@ async def admin_set_tier(
         await db.commit()
 
     return {"token": token, "tier": tier}
+
+
+@app.post("/admin/push/announcement")
+async def admin_push_announcement(
+    request: Request,
+    x_admin_key: Optional[str] = Header(default=None),
+) -> Any:
+    _admin_check(x_admin_key)
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="request body must be valid JSON")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    user_id = str(payload.get("user_id") or "").strip()
+    title = str(payload.get("title") or "").strip()
+    message_body = str(payload.get("body") or "").strip()
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id required")
+    if not title:
+        raise HTTPException(status_code=400, detail="title required")
+    if not message_body:
+        raise HTTPException(status_code=400, detail="body required")
+    if len(title) > 200:
+        raise HTTPException(status_code=400, detail="title too long")
+    if len(message_body) > 2000:
+        raise HTTPException(status_code=400, detail="body too long")
+
+    user = await _get_user_row_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+
+    result = await send_push(user_id=user_id, title=title, body=message_body)
+    return {
+        "ok": result.get("sent", 0) > 0,
+        "type": "system_announcement",
+        "user_id": user_id,
+        "title": title,
+        "body": message_body,
+        "delivery": result,
+    }
 
 
 

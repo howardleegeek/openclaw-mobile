@@ -21,6 +21,10 @@
         <key>NSAllowsArbitraryLoads</key>
         <true/>
     </dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>ClawPhones 需要使用麦克风进行语音输入。</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>ClawPhones 需要语音识别权限将语音转换为文本。</string>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIApplicationSceneManifest</key>

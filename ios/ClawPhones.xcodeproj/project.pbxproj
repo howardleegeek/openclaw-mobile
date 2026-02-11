@@ -22,6 +22,7 @@
 		87D417640B4FE90663F8EE30 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575C0A74873CA4D4C6F87F30 /* MessageRow.swift */; };
 		96B5011849CE99D54BE27B2D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 06896E4FD29AE979B8155D6D /* Assets.xcassets */; };
 		A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */; };
+		A1D8B6377C8E4A5EA2F96B31 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B2C7939D4E41A1986A23C5 /* SpeechRecognizer.swift */; };
 		B909E20879439BD44BC7D68E /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9BE935A3A036729805815B /* Message.swift */; };
 			BF0C057F4C1EB0639041006A /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 529105A52C7F000A0054A75F /* ChatInputBar.swift */; };
 			DD7A8C00A79304765E826751 /* ConversationListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A672C209A8C2BFB13F1B726 /* ConversationListViewModel.swift */; };
@@ -46,6 +47,7 @@
 		5D64C35235EE4A72B4BCAC3D /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		5B9BE935A3A036729805815B /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenClawAPI.swift; sourceTree = "<group>"; };
+		F4B2C7939D4E41A1986A23C5 /* SpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizer.swift; sourceTree = "<group>"; };
 		C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporter.swift; sourceTree = "<group>"; };
 		7BEB09C2D39E49319063F40F /* StreamChunk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamChunk.swift; sourceTree = "<group>"; };
 		8BF3986839DCF6C9FD74576D /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
@@ -134,6 +136,7 @@
 				E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */,
 				F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */,
 				5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */,
+				F4B2C7939D4E41A1986A23C5 /* SpeechRecognizer.swift */,
 				C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */,
 			);
 			path = Services;
@@ -265,6 +268,7 @@
 					53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */,
 					7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */,
 					A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */,
+					A1D8B6377C8E4A5EA2F96B31 /* SpeechRecognizer.swift in Sources */,
 					D5A2F823B2D34E6C9EAB1C2D /* CrashReporter.swift in Sources */,
 				);
 			runOnlyForDeploymentPostprocessing = 0;
