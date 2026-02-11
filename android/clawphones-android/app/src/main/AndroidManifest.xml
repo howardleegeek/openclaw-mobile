@@ -20,6 +20,8 @@
         android:protectionLevel="dangerous" />
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -150,6 +152,11 @@
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 
         <activity
+            android:name="ai.clawphones.agent.chat.NodeModeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+
+        <activity
             android:name="ai.clawphones.agent.DashboardActivity"
             android:exported="false"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
@@ -166,6 +173,11 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keep OpenClaw gateway alive" />
         </service>
+
+        <service
+            android:name="ai.clawphones.agent.chat.NodeModeService"
+            android:exported="false"
+            android:foregroundServiceType="camera|location|dataSync" />
 
         <activity
             android:name=".app.activities.HelpActivity"

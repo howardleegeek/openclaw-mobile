@@ -8,6 +8,7 @@ import androidx.security.crypto.MasterKeys;
 
 import com.termux.shared.logger.Logger;
 
+import okhttp3.OkHttpClient;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -31,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Minimal HTTP client for ClawPhones backend API.
@@ -63,6 +65,12 @@ public class ClawPhonesAPI {
     private static final long TOKEN_REFRESH_WINDOW_SECONDS = 7L * 24L * 60L * 60L;
     private static final List<String> DEFAULT_PERSONAS = Arrays.asList(
         "assistant", "coder", "writer", "translator", "custom");
+    private static final OkHttpClient SHARED_OKHTTP_CLIENT = new OkHttpClient.Builder()
+        .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .writeTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .retryOnConnectionFailure(true)
+        .build();
 
     public static class ApiException extends Exception {
         public final int statusCode;
@@ -204,6 +212,10 @@ public class ClawPhonesAPI {
             this.size = Math.max(0L, size);
             this.extractedText = extractedText;
         }
+    }
+
+    public static OkHttpClient getOkHttpClient() {
+        return SHARED_OKHTTP_CLIENT;
     }
 
     // ── SharedPreferences helpers ───────────────────────────────────────────────
@@ -475,6 +487,16 @@ public class ClawPhonesAPI {
         String url = BASE_URL + "/v1/conversations/" + conversationId + "/chat";
         JSONObject resp = doPost(url, body, token);
         return extractAssistantContent(resp);
+    }
+
+    /** GET /v1/world/cells?hours=&res= -> raw object payload (JSONObject or JSONArray). */
+    public static Object getWorldCellsRaw(Context context, int hours, int res)
+        throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
+        int safeHours = Math.max(1, hours);
+        int safeRes = Math.max(0, res);
+        String url = BASE_URL + "/v1/world/cells?hours=" + safeHours + "&res=" + safeRes;
+        return doGetAny(url, token);
     }
 
     /** GET /v1/user/plan -> current tier + daily usage + tier comparison */

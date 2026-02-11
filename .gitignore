@@ -22,3 +22,31 @@ proxy/.env
 proxy/data/
 proxy/*.sqlite3
 proxy/*.log
+
+# Build artifacts
+.clang-module-cache/
+.gcloud-config/
+.gcloud/
+ios/.build/
+ios/.swift-module-cache/
+ios/build/
+ios/build-local/
+ios/build-sim/
+ios/ClawPhones/.swift-module-cache/
+ios/ClawPhones.xcodeproj/project.xcworkspace/
+ios/ClawPhones.xcodeproj/xcuserdata/
+android/clawphones-android/.gradle-home/
+android/clawphones-android/.gradle-local/
+memory/
+
+# Codex trace files
+**/CLAUDE.md
+MEMORY.md
+HEARTBEAT.md
+PROGRESS.md
+
+# Node/temp
+node_modules/
+tmp-relay/
+server.testable.mjs
+package-lock.json

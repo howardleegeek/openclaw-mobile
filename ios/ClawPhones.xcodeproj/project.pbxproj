@@ -7,18 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		28AEE08D26564514B758977B /* ThinkingIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D5888BD4C147DE81C8114D /* ThinkingIndicator.swift */; };
-		3AC6F9CE2F15D28C81501EEA /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEA999748FD4880AE76B25A /* ChatView.swift */; };
-		3E524F809A74A381D7863674 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C25043BCDD3165B1A9EE994 /* ContentView.swift */; };
+			28AEE08D26564514B758977B /* ThinkingIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D5888BD4C147DE81C8114D /* ThinkingIndicator.swift */; };
+			3AC6F9CE2F15D28C81501EEA /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEA999748FD4880AE76B25A /* ChatView.swift */; };
+			A7D1E4F0C9214A7B8E3D5F10 /* CoverageMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8E2F5A1D0324B8C9F4E6A21 /* CoverageMapView.swift */; };
+			3E524F809A74A381D7863674 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C25043BCDD3165B1A9EE994 /* ContentView.swift */; };
 		449C4D244B7A1C00D4AD632E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 30145ADC199352484415BA60 /* PrivacyInfo.xcprivacy */; };
 		4BBB5AC4A4384E83B3CB3E99 /* StreamChunk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEB09C2D39E49319063F40F /* StreamChunk.swift */; };
 		53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */; };
+		53E6CFE2A6FB59CB700453BC /* RelayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F978F2F0D2B85014470EDB20 /* RelayClient.swift */; };
 		6308C676767303AC938FD129 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4B6AD8A22BC95F89042271 /* ChatViewModel.swift */; };
+		C1AA1001D5E34A0090B10001 /* VisionDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1AA1020D5E34A0090B10001 /* VisionDetector.swift */; };
+		C1AA1002D5E34A0090B10001 /* VisionDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1AA1022D5E34A0090B10001 /* VisionDetectorTests.swift */; };
+		C1AA1003D5E34A0090B10001 /* person_sample.jpg in Resources */ = {isa = PBXBuildFile; fileRef = C1AA1023D5E34A0090B10001 /* person_sample.jpg */; };
+		C1AA1004D5E34A0090B10001 /* animal_sample.jpg in Resources */ = {isa = PBXBuildFile; fileRef = C1AA1024D5E34A0090B10001 /* animal_sample.jpg */; };
 		6B1685B1F341B6314DDB77A5 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AC5AE07859E9065699CB5FE /* ConversationListView.swift */; };
 		754FEB5C834448DA8E2246DE /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7671A61CD7494469A0232FFC /* LoginView.swift */; };
 		7A4874AD115A4A1D944E52B8 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862F703D18564A0E9CE80F46 /* SettingsViewModel.swift */; };
 		7B5A22A66466928C9A83C19F /* ClawPhonesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA521445573D71EA58448AA /* ClawPhonesApp.swift */; };
 		7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */; };
+		7CF92F190A301C0B0D50AE01 /* AlertEventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF92F190A301C0B0D50AE02 /* AlertEventStore.swift */; };
+		7CF92F190A301C0B0D50AE03 /* AlertDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF92F190A301C0B0D50AE04 /* AlertDetailView.swift */; };
+		7CF92F190A301C0B0D50AE05 /* AlertHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF92F190A301C0B0D50AE06 /* AlertHistoryView.swift */; };
+		7CF92F190A301C0B0D50AE07 /* AlertEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF92F190A301C0B0D50AE08 /* AlertEvent.swift */; };
 		8485D758DFF24CE48C63F490 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8D12A6636D41058D5DB456 /* SettingsView.swift */; };
 			87D417640B4FE90663F8EE30 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575C0A74873CA4D4C6F87F30 /* MessageRow.swift */; };
 			96B5011849CE99D54BE27B2D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 06896E4FD29AE979B8155D6D /* Assets.xcassets */; };
@@ -31,6 +41,8 @@
 		A1D8B6377C8E4A5EA2F96B31 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B2C7939D4E41A1986A23C5 /* SpeechRecognizer.swift */; };
 		A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */; };
 		C8A11F59D2E84B0DA7F39002 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A11F59D2E84B0DA7F39001 /* AnalyticsService.swift */; };
+		B1D0E0C1A2B3000000000003 /* MotionDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0E0C1A2B3000000000001 /* MotionDetector.swift */; };
+		B1D0E0C1A2B3000000000004 /* NodeModeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0E0C1A2B3000000000002 /* NodeModeService.swift */; };
 		B6E77F6C59C34F4A9E80B341 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D64C35235EE4A72B4BCAC3D /* OnboardingView.swift */; };
 		B909E20879439BD44BC7D68E /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9BE935A3A036729805815B /* Message.swift */; };
 		BF0C057F4C1EB0639041006A /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 529105A52C7F000A0054A75F /* ChatInputBar.swift */; };
@@ -85,6 +97,10 @@
 		C8A11F59D2E84B0DA7F39001 /* AnalyticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsService.swift; sourceTree = "<group>"; };
 		7671A61CD7494469A0232FFC /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		7BEB09C2D39E49319063F40F /* StreamChunk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamChunk.swift; sourceTree = "<group>"; };
+		7CF92F190A301C0B0D50AE02 /* AlertEventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertEventStore.swift; sourceTree = "<group>"; };
+		7CF92F190A301C0B0D50AE04 /* AlertDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertDetailView.swift; sourceTree = "<group>"; };
+		7CF92F190A301C0B0D50AE06 /* AlertHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertHistoryView.swift; sourceTree = "<group>"; };
+		7CF92F190A301C0B0D50AE08 /* AlertEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertEvent.swift; sourceTree = "<group>"; };
 			862F703D18564A0E9CE80F46 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 			8BF3986839DCF6C9FD74576D /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
 			97D8E07F8EC6E306984E5477 /* ClawPhones.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawPhones.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -97,15 +113,19 @@
 		A2B3C4D50100000000000006 /* SharePayloadBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePayloadBridge.swift; sourceTree = "<group>"; };
 		A2B3C4D50100000000000007 /* MessageQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageQueue.swift; sourceTree = "<group>"; };
 		A2B3C4D50100000000000008 /* ConversationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationCache.swift; sourceTree = "<group>"; };
-		C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporter.swift; sourceTree = "<group>"; };
-		DAA521445573D71EA58448AA /* ClawPhonesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawPhonesApp.swift; sourceTree = "<group>"; };
-		DFEA999748FD4880AE76B25A /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+			C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporter.swift; sourceTree = "<group>"; };
+			DAA521445573D71EA58448AA /* ClawPhonesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawPhonesApp.swift; sourceTree = "<group>"; };
+			B8E2F5A1D0324B8C9F4E6A21 /* CoverageMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverageMapView.swift; sourceTree = "<group>"; };
+			DFEA999748FD4880AE76B25A /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		B1D0E0C1A2B3000000000001 /* MotionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionDetector.swift; sourceTree = "<group>"; };
+		B1D0E0C1A2B3000000000002 /* NodeModeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeModeService.swift; sourceTree = "<group>"; };
 		E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceConfig.swift; sourceTree = "<group>"; };
 		E958567AAFAC4CB4B2935E2F /* PlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanView.swift; sourceTree = "<group>"; };
 		F0D5888BD4C147DE81C8114D /* ThinkingIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingIndicator.swift; sourceTree = "<group>"; };
 		F4B2C7939D4E41A1986A23C5 /* SpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizer.swift; sourceTree = "<group>"; };
 		F59290DE3BD6463EA50E0D45 /* AIConfigView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfigView.swift; sourceTree = "<group>"; };
 		F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		F978F2F0D2B85014470EDB20 /* RelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayClient.swift; sourceTree = "<group>"; };
 		FB4B6AD8A22BC95F89042271 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -187,11 +207,15 @@
 			A42DDB42031A67342B35AD3C /* Services */ = {
 				isa = PBXGroup;
 				children = (
+					B1D0E0C1A2B3000000000002 /* NodeModeService.swift */,
+					B1D0E0C1A2B3000000000001 /* MotionDetector.swift */,
 					E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */,
 					9FBA20A8CB73F2866E2F8A02 /* BiometricAuthService.swift */,
 					F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */,
+					F978F2F0D2B85014470EDB20 /* RelayClient.swift */,
 					5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */,
 					C8A11F59D2E84B0DA7F39001 /* AnalyticsService.swift */,
+					7CF92F190A301C0B0D50AE02 /* AlertEventStore.swift */,
 				F4B2C7939D4E41A1986A23C5 /* SpeechRecognizer.swift */,
 				C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */,
 				A2B3C4D50100000000000006 /* SharePayloadBridge.swift */,
@@ -211,13 +235,16 @@
 			path = ClawPhonesShare;
 			sourceTree = "<group>";
 		};
-		A830CB08151C908F0230369D /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				F59290DE3BD6463EA50E0D45 /* AIConfigView.swift */,
-				DFEA999748FD4880AE76B25A /* ChatView.swift */,
-				529105A52C7F000A0054A75F /* ChatInputBar.swift */,
-				3AC5AE07859E9065699CB5FE /* ConversationListView.swift */,
+			A830CB08151C908F0230369D /* Views */ = {
+				isa = PBXGroup;
+				children = (
+					F59290DE3BD6463EA50E0D45 /* AIConfigView.swift */,
+					7CF92F190A301C0B0D50AE04 /* AlertDetailView.swift */,
+					7CF92F190A301C0B0D50AE06 /* AlertHistoryView.swift */,
+					DFEA999748FD4880AE76B25A /* ChatView.swift */,
+					B8E2F5A1D0324B8C9F4E6A21 /* CoverageMapView.swift */,
+					529105A52C7F000A0054A75F /* ChatInputBar.swift */,
+					3AC5AE07859E9065699CB5FE /* ConversationListView.swift */,
 				7671A61CD7494469A0232FFC /* LoginView.swift */,
 				575C0A74873CA4D4C6F87F30 /* MessageRow.swift */,
 				5D64C35235EE4A72B4BCAC3D /* OnboardingView.swift */,
@@ -232,6 +259,7 @@
 		AB9101FEE8BC1B980D750FB8 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				7CF92F190A301C0B0D50AE08 /* AlertEvent.swift */,
 				5B9BE935A3A036729805815B /* Message.swift */,
 				7BEB09C2D39E49319063F40F /* StreamChunk.swift */,
 			);
@@ -298,6 +326,15 @@
 			isa = PBXProject;
 			attributes = {
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					E0AA911DA650DD5907F19F75 = {
+						SystemCapabilities = {
+							com.apple.BackgroundModes = {
+								enabled = 1;
+							};
+						};
+					};
+				};
 			};
 			buildConfigurationList = 8FE9C3853D5B1C8A37321800 /* Build configuration list for PBXProject "ClawPhones" */;
 			compatibilityVersion = "Xcode 15.0";
@@ -347,11 +384,12 @@
 				3E524F809A74A381D7863674 /* ContentView.swift in Sources */,
 				D38A010CAD8646EA86AEEF5E /* AuthViewModel.swift in Sources */,
 				6308C676767303AC938FD129 /* ChatViewModel.swift in Sources */,
-				DD7A8C00A79304765E826751 /* ConversationListViewModel.swift in Sources */,
-				7A4874AD115A4A1D944E52B8 /* SettingsViewModel.swift in Sources */,
-				754FEB5C834448DA8E2246DE /* LoginView.swift in Sources */,
-				3AC6F9CE2F15D28C81501EEA /* ChatView.swift in Sources */,
-				87D417640B4FE90663F8EE30 /* MessageRow.swift in Sources */,
+					DD7A8C00A79304765E826751 /* ConversationListViewModel.swift in Sources */,
+					7A4874AD115A4A1D944E52B8 /* SettingsViewModel.swift in Sources */,
+					754FEB5C834448DA8E2246DE /* LoginView.swift in Sources */,
+					3AC6F9CE2F15D28C81501EEA /* ChatView.swift in Sources */,
+					A7D1E4F0C9214A7B8E3D5F10 /* CoverageMapView.swift in Sources */,
+					87D417640B4FE90663F8EE30 /* MessageRow.swift in Sources */,
 				B6E77F6C59C34F4A9E80B341 /* OnboardingView.swift in Sources */,
 				28AEE08D26564514B758977B /* ThinkingIndicator.swift in Sources */,
 				BF0C057F4C1EB0639041006A /* ChatInputBar.swift in Sources */,
@@ -360,13 +398,20 @@
 				E0824FE9B448855B1D60031B /* SetupView.swift in Sources */,
 				E95210B60420431CA5A0F782 /* PlanView.swift in Sources */,
 				C39C68C22C5D4627BE6656AB /* AIConfigView.swift in Sources */,
+				7CF92F190A301C0B0D50AE03 /* AlertDetailView.swift in Sources */,
+				7CF92F190A301C0B0D50AE05 /* AlertHistoryView.swift in Sources */,
 				B909E20879439BD44BC7D68E /* Message.swift in Sources */,
+				7CF92F190A301C0B0D50AE07 /* AlertEvent.swift in Sources */,
 					4BBB5AC4A4384E83B3CB3E99 /* StreamChunk.swift in Sources */,
-					53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */,
-					7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */,
+						53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */,
+						53E6CFE2A6FB59CB700453BC /* RelayClient.swift in Sources */,
+						7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */,
 					9FBA20A8CB73F2866E2F8A01 /* BiometricAuthService.swift in Sources */,
 					A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */,
 					C8A11F59D2E84B0DA7F39002 /* AnalyticsService.swift in Sources */,
+					B1D0E0C1A2B3000000000004 /* NodeModeService.swift in Sources */,
+					B1D0E0C1A2B3000000000003 /* MotionDetector.swift in Sources */,
+					7CF92F190A301C0B0D50AE01 /* AlertEventStore.swift in Sources */,
 					A1D8B6377C8E4A5EA2F96B31 /* SpeechRecognizer.swift in Sources */,
 				D5A2F823B2D34E6C9EAB1C2D /* CrashReporter.swift in Sources */,
 				A1B2C3D40100000000000004 /* SharePayloadBridge.swift in Sources */,

@@ -310,6 +310,18 @@
             android:textColor="#1A1A1A"
             android:textStyle="bold" />
 
+        <!-- Node Mode -->
+        <Button
+            android:id="@+id/btn_node_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="@string/dashboard_button_node_mode"
+            android:textAllCaps="false"
+            android:background="@drawable/clawphones_button_bg"
+            android:textColor="#1A1A1A"
+            android:textStyle="bold" />
+
         <!-- Terminal Button -->
         <Button
             android:id="@+id/btn_open_terminal"

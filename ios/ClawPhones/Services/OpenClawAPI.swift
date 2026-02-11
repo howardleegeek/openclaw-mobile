@@ -361,6 +361,26 @@ final class OpenClawAPI {
         return try await downloadUserDataExport(from: payload.downloadURL, exportId: payload.exportId)
     }
 
+    // MARK: World Coverage
+
+    /// GET /v1/world/cells?hours=&res=
+    /// Returns raw payload since relay schema may evolve.
+    func getWorldCells(hours: Int = 24, res: Int = 9) async throws -> Data {
+        var components = URLComponents(string: "\(baseURLString)/v1/world/cells")!
+        components.queryItems = [
+            URLQueryItem(name: "hours", value: String(max(1, hours))),
+            URLQueryItem(name: "res", value: String(max(0, res)))
+        ]
+        let url = components.url!
+
+        var request = try await authorizedRequest(url: url, method: "GET")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+        return data
+    }
+
     // MARK: Conversations
 
     func createConversation(systemPrompt: String? = nil) async throws -> Conversation {

@@ -9,6 +9,7 @@ struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @State private var inputText: String = ""
     @State private var showCopiedToast: Bool = false
+    @State private var showCoverageMap: Bool = false
     @State private var copiedToastTask: Task<Void, Never>?
     @State private var lastObservedLastMessageId: String?
 
@@ -81,6 +82,17 @@ struct ChatView: View {
 
             Divider()
 
+            if showCoverageMap {
+                CoverageMapView()
+                    .frame(height: 250)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+
+                Divider()
+            }
+
             ChatInputBar(
                 text: $inputText,
                 isLoading: viewModel.isLoading,
@@ -108,6 +120,18 @@ struct ChatView: View {
         }
         .navigationTitle(viewModel.conversationTitle?.isEmpty == false ? (viewModel.conversationTitle ?? "") : "Chat")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showCoverageMap.toggle()
+                    }
+                } label: {
+                    Image(systemName: showCoverageMap ? "map.fill" : "map")
+                }
+                .accessibilityLabel("Toggle Coverage Map")
+            }
+        }
         .overlay(alignment: .bottom) {
             if showCopiedToast {
                 Text("已复制")

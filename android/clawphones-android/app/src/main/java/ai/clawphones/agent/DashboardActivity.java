@@ -105,6 +105,7 @@ public class DashboardActivity extends Activity {
         mRestartButton = findViewById(R.id.btn_restart);
         Button openTerminalButton = findViewById(R.id.btn_open_terminal);
         Button openAiChatButton = findViewById(R.id.btn_ai_chat);
+        Button openNodeModeButton = findViewById(R.id.btn_node_mode);
 
         // Setup button listeners
         mStartButton.setOnClickListener(v -> startGateway());
@@ -112,6 +113,7 @@ public class DashboardActivity extends Activity {
         mRestartButton.setOnClickListener(v -> restartGateway());
         openTerminalButton.setOnClickListener(v -> openTerminal());
         openAiChatButton.setOnClickListener(v -> openAiChat());
+        openNodeModeButton.setOnClickListener(v -> openNodeMode());
 
         mSshCard = findViewById(R.id.ssh_card);
         mSshInfoText = findViewById(R.id.ssh_info_text);
@@ -147,6 +149,10 @@ public class DashboardActivity extends Activity {
             ? ai.clawphones.agent.chat.ChatActivity.class
             : ai.clawphones.agent.chat.LoginActivity.class;
         startActivity(new Intent(this, target));
+    }
+
+    private void openNodeMode() {
+        startActivity(new Intent(this, ai.clawphones.agent.chat.NodeModeActivity.class));
     }
 
     @Override

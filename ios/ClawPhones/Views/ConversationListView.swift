@@ -34,6 +34,12 @@ struct ConversationListView: View {
             .navigationTitle("ClawPhones")
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    NavigationLink {
+                        AlertHistoryView()
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+
                     Button {
                         showNewChat = true
                     } label: {

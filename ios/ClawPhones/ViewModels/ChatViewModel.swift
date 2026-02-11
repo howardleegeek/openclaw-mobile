@@ -31,6 +31,13 @@ final class ChatViewModel: ObservableObject {
     private let maxPendingFiles = 3
     private let maxImageBytes = 10 * 1024 * 1024
     private let maxFileBytes = 20 * 1024 * 1024
+    private let allowedFileMimeTypes: Set<String> = [
+        "application/pdf",
+        "text/plain",
+        "text/csv",
+        "application/json",
+        "text/markdown"
+    ]
 
     struct PendingFile: Identifiable, Hashable {
         let id: String
@@ -157,18 +164,21 @@ final class ChatViewModel: ObservableObject {
             return
         }
 
-        let isImage = mimeType.hasPrefix("image/")
+        let normalizedMime = normalizedAttachmentMimeType(mimeType, filename: filename)
+        let isImage = normalizedMime.hasPrefix("image/")
         let maxBytes = isImage ? maxImageBytes : maxFileBytes
         guard data.count <= maxBytes else {
             errorMessage = "文件过大，请压缩后重试"
             return
         }
 
+        if !isImage && !allowedFileMimeTypes.contains(normalizedMime) {
+            errorMessage = "不支持的文件类型"
+            return
+        }
+
         let safeName = filename.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedName = safeName.isEmpty ? "upload.bin" : safeName
-        let normalizedMime = mimeType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "application/octet-stream"
-            : mimeType
 
         pendingFiles.append(
             PendingFile(
@@ -179,6 +189,39 @@ final class ChatViewModel: ObservableObject {
                 thumbnail: thumbnail
             )
         )
+    }
+
+    private func normalizedAttachmentMimeType(_ mimeType: String, filename: String) -> String {
+        let raw = mimeType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if raw == "text/x-markdown" {
+            return "text/markdown"
+        }
+        if !raw.isEmpty, raw != "application/octet-stream" {
+            return raw
+        }
+        let ext = (filename as NSString).pathExtension.lowercased()
+        switch ext {
+        case "pdf":
+            return "application/pdf"
+        case "txt":
+            return "text/plain"
+        case "csv":
+            return "text/csv"
+        case "json":
+            return "application/json"
+        case "md", "markdown":
+            return "text/markdown"
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "png":
+            return "image/png"
+        case "gif":
+            return "image/gif"
+        case "webp":
+            return "image/webp"
+        default:
+            return raw.isEmpty ? "application/octet-stream" : raw
+        }
     }
 
     func removePendingFile(id: String) {
@@ -233,7 +276,11 @@ final class ChatViewModel: ObservableObject {
         }
 
         let now = Int(Date().timeIntervalSince1970)
-        let localDisplayContent = buildLocalUserContent(text: trimmed, files: filesToSend)
+        let localDisplayContent = buildLocalUserContent(
+            text: trimmed,
+            files: filesToSend,
+            uploadedFileIds: uploadedFileIds
+        )
         let userMessage = Message(id: UUID().uuidString, role: .user, content: localDisplayContent, createdAt: now)
         messages.append(userMessage)
 
@@ -541,34 +588,36 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func buildLocalUserContent(text: String, files: [PendingFile]) -> String {
+    private func buildLocalUserContent(text: String, files: [PendingFile], uploadedFileIds: [String]) -> String {
         guard !files.isEmpty else { return text }
-        let first = files[0]
-        let payload: [String: Any] = [
-            "name": first.filename,
-            "size": first.size,
-            "type": first.mimeType
+        var normalizedIds: [String] = []
+        var filesPayload: [[String: Any]] = []
+        let count = min(files.count, uploadedFileIds.count)
+        for index in 0..<count {
+            let file = files[index]
+            let fileId = uploadedFileIds[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !fileId.isEmpty else { continue }
+            normalizedIds.append(fileId)
+            filesPayload.append(
+                [
+                    "id": fileId,
+                    "name": file.filename,
+                    "size": file.size,
+                    "type": file.mimeType,
+                    "url": "/v1/files/\(fileId)"
+                ]
+            )
+        }
+
+        guard !normalizedIds.isEmpty else { return text }
+
+        let meta: [String: Any] = [
+            "file_ids": normalizedIds,
+            "files": filesPayload
         ]
-        let payloadData = (try? JSONSerialization.data(withJSONObject: payload, options: [])) ?? Data("{}".utf8)
+        let payloadData = (try? JSONSerialization.data(withJSONObject: meta, options: [])) ?? Data("{}".utf8)
         let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
-
-        var contextLines: [String] = []
-        if files.count > 1 {
-            let remain = files.dropFirst().map { "\($0.filename) (\(formatBytes($0.size)))" }
-            if !remain.isEmpty {
-                contextLines.append("Additional files: \(remain.joined(separator: ", "))")
-            }
-        }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            contextLines.append(trimmed)
-        }
-        let context = contextLines.joined(separator: "\n")
-
-        if context.isEmpty {
-            return "[[FILE_CARD]]\(payloadJSON)[[/FILE_CARD]]"
-        }
-        return "[[FILE_CARD]]\(payloadJSON)[[/FILE_CARD]][[FILE_CONTEXT]]\(context)[[/FILE_CONTEXT]]"
+        return "[[MESSAGE_META]]\(payloadJSON)[[/MESSAGE_META]]\(text)"
     }
 
     private func formatBytes(_ size: Int) -> String {

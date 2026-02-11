@@ -438,6 +438,7 @@
     <string name="dashboard_device_ip_placeholder">&lt;设备 IP&gt;</string>
     <string name="dashboard_password_not_set">&lt;未设置&gt;</string>
     <string name="dashboard_ssh_info">ssh -p 8022 %1$s\n密码：%2$s</string>
+    <string name="dashboard_button_node_mode">Node Mode</string>
 
     <!-- ClawPhones Plan -->
     <string name="plan_title">Plan</string>
@@ -525,5 +526,35 @@
     <string name="gateway_monitor_status_failed_manual">失败，需要手动重启</string>
     <string name="gateway_monitor_status_failed_attempt">失败（重试 %1$d/%2$d）</string>
     <string name="gateway_monitor_notification_status">网关：%1$s</string>
+
+    <!-- ClawVision Node Mode -->
+    <string name="node_mode_title">ClawVision Node</string>
+    <string name="node_mode_switch_label">Enable Node Mode</string>
+    <string name="node_mode_status_camera">Camera</string>
+    <string name="node_mode_status_gps">GPS</string>
+    <string name="node_mode_status_upload">Upload</string>
+    <string name="node_mode_stats_title">Node Stats</string>
+    <string name="node_mode_stats_frames">Frames Captured</string>
+    <string name="node_mode_stats_events">Events Detected</string>
+    <string name="node_mode_stats_uptime">Uptime</string>
+    <string name="node_mode_settings_button">Node Settings</string>
+    <string name="node_mode_settings_title">Node Settings</string>
+    <string name="node_mode_settings_relay_url">Relay URL</string>
+    <string name="node_mode_settings_relay_url_hint">https://relay.example.com/upload</string>
+    <string name="node_mode_settings_frame_rate">Frame Rate</string>
+    <string name="node_mode_settings_jpeg_quality">JPEG Quality</string>
+    <string name="node_mode_settings_motion_sensitivity">Motion Sensitivity</string>
+    <string name="node_mode_settings_min_battery">Min Battery</string>
+    <string name="node_mode_settings_min_battery_value">%1$d%%</string>
+    <string name="node_mode_settings_wifi_only">WiFi Only</string>
+    <string name="node_mode_settings_save">Save</string>
+    <string name="node_mode_settings_cancel">Cancel</string>
+    <string name="node_mode_settings_saved">Node settings saved</string>
+    <string name="node_mode_permission_denied">Camera/Location permissions are required</string>
+    <string name="node_mode_start_failed">Unable to start Node Mode</string>
+    <string name="node_mode_notification_channel_name">ClawVision Node</string>
+    <string name="node_mode_notification_channel_desc">Node mode foreground status</string>
+    <string name="node_mode_notification_running">Node mode is running</string>
+    <string name="node_mode_notification_stats">Frames %1$d • Events %2$d</string>
 
 </resources>

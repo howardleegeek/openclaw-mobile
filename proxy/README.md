@@ -40,6 +40,8 @@ Optional:
 - `TOKEN_DB_PATH` (default: `./data/tokens.sqlite3`)
 - `ADMIN_KEY` (enables admin endpoints)
 - `MOCK_MODE=1` (dev-only: no upstream calls; returns deterministic mock replies)
+- `APPLE_CLIENT_ID` (Sign in with Apple audience, usually iOS bundle id)
+- `APPLE_CLIENT_IDS` (comma-separated audiences, overrides/supplements `APPLE_CLIENT_ID`)
 
 ## Run (dev)
 
