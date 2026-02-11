@@ -352,6 +352,25 @@ async def _init_db() -> None:
         )
         await db.execute("CREATE INDEX IF NOT EXISTS idx_conversations_token_updated ON conversations(device_token, updated_at)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at)")
+
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS crash_reports (
+              id TEXT PRIMARY KEY,
+              device_token TEXT,
+              platform TEXT,
+              app_version TEXT,
+              device_model TEXT,
+              os_version TEXT,
+              stacktrace TEXT,
+              user_action TEXT,
+              fatal INTEGER DEFAULT 1,
+              status TEXT DEFAULT 'new',
+              created_at INTEGER NOT NULL
+            )
+            """
+        )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_crash_reports_status ON crash_reports(status, created_at)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens(user_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
         await db.commit()
@@ -1927,6 +1946,101 @@ async def admin_set_tier(
         await db.commit()
 
     return {"token": token, "tier": tier}
+
+
+
+
+# ── Crash Reports ─────────────────────────────────────────────────────────────
+
+@app.post("/v1/crash-reports")
+async def post_crash_report(request: Request) -> Any:
+    """App submits crash report (requires auth token)."""
+    auth = request.headers.get("authorization")
+    token = _parse_bearer(auth)
+    if not token:
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    # verify token exists
+    await _get_tier_for_token(token)
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid json")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid json body")
+
+    now = int(time.time())
+    report_id = str(uuid.uuid4())
+
+    stacktrace = str(body.get("stacktrace", ""))[:5000]  # cap at 5KB
+    platform = str(body.get("platform", "unknown"))[:20]
+    app_version = str(body.get("app_version", ""))[:50]
+    device_model = str(body.get("device_model", ""))[:100]
+    os_version = str(body.get("os_version", ""))[:50]
+    user_action = str(body.get("user_action", ""))[:200]
+    fatal = 1 if body.get("fatal", True) else 0
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO crash_reports(id,device_token,platform,app_version,device_model,os_version,stacktrace,user_action,fatal,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (report_id, token, platform, app_version, device_model, os_version, stacktrace, user_action, fatal, "new", now),
+        )
+        await db.commit()
+
+    return {"id": report_id, "status": "received"}
+
+
+@app.get("/v1/crash-reports")
+async def get_crash_reports(request: Request, status: str = None, limit: int = 50) -> Any:
+    """Admin: list crash reports. Requires ADMIN_KEY header."""
+    admin = request.headers.get("x-admin-key") or request.headers.get("authorization", "").replace("Bearer ", "")
+    if admin != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="admin key required")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if status:
+            async with db.execute(
+                "SELECT * FROM crash_reports WHERE status=? ORDER BY created_at DESC LIMIT ?",
+                (status, min(limit, 200)),
+            ) as cur:
+                rows = await cur.fetchall()
+        else:
+            async with db.execute(
+                "SELECT * FROM crash_reports ORDER BY created_at DESC LIMIT ?",
+                (min(limit, 200),),
+            ) as cur:
+                rows = await cur.fetchall()
+
+    return {"crash_reports": [dict(r) for r in rows], "count": len(rows)}
+
+
+@app.patch("/v1/crash-reports/{report_id}")
+async def patch_crash_report(report_id: str, request: Request) -> Any:
+    """Admin: update crash report status."""
+    admin = request.headers.get("x-admin-key") or request.headers.get("authorization", "").replace("Bearer ", "")
+    if admin != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="admin key required")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid json")
+
+    new_status = body.get("status")
+    if new_status not in ("new", "spec", "fixing", "fixed", "wontfix"):
+        raise HTTPException(status_code=400, detail="invalid status")
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        result = await db.execute(
+            "UPDATE crash_reports SET status=? WHERE id=?",
+            (new_status, report_id),
+        )
+        await db.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="report not found")
+
+    return {"id": report_id, "status": new_status}
 
 
 if __name__ == "__main__":

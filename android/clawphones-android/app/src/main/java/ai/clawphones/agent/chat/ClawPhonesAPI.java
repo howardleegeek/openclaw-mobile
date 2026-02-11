@@ -193,10 +193,10 @@ public class ClawPhonesAPI {
         doDeleteNoContent(BASE_URL + "/v1/conversations/" + conversationId, token);
     }
 
-    /** GET /v1/conversations/{id}/messages -> [{id,role,content,created_at}, ...] */
+    /** GET /v1/conversations/{id} -> {id, title, messages:[{id,role,content,created_at}, ...]} */
     public static List<Map<String, Object>> getMessages(String token, String conversationId)
         throws IOException, ApiException, JSONException {
-        Object resp = doGetAny(BASE_URL + "/v1/conversations/" + conversationId + "/messages", token);
+        Object resp = doGetAny(BASE_URL + "/v1/conversations/" + conversationId, token);
         JSONArray arr = extractArray(resp, "messages");
         List<Map<String, Object>> out = new ArrayList<>();
         if (arr == null) return out;
