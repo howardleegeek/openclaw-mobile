@@ -41,7 +41,7 @@ final class AuthViewModel: ObservableObject {
 
         do {
             let payload = try await OpenClawAPI.shared.login(email: email, password: password)
-            DeviceConfig.shared.saveUserToken(payload.token)
+            DeviceConfig.shared.saveUserToken(payload.token, expiresAt: payload.expiresAt)
             isAuthenticated = true
         } catch {
             errorMessage = error.localizedDescription
@@ -55,7 +55,7 @@ final class AuthViewModel: ObservableObject {
 
         do {
             let payload = try await OpenClawAPI.shared.register(email: email, password: password, name: name)
-            DeviceConfig.shared.saveUserToken(payload.token)
+            DeviceConfig.shared.saveUserToken(payload.token, expiresAt: payload.expiresAt)
             isAuthenticated = true
         } catch {
             errorMessage = error.localizedDescription
@@ -69,7 +69,7 @@ final class AuthViewModel: ObservableObject {
 
         do {
             let payload = try await OpenClawAPI.shared.loginWithApple(identityToken: identityToken)
-            DeviceConfig.shared.saveUserToken(payload.token)
+            DeviceConfig.shared.saveUserToken(payload.token, expiresAt: payload.expiresAt)
             isAuthenticated = true
         } catch {
             errorMessage = error.localizedDescription

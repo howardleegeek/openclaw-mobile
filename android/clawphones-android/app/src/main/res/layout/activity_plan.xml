@@ -1,0 +1,454 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/clawphones_background">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/plan_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/clawphones_background"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        app:titleTextColor="@color/clawphones_on_background"
+        app:subtitleTextColor="@color/clawphones_secondary_text" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/clawphones_card_bg"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/plan_current_tier_label"
+                    android:textColor="@color/clawphones_secondary_text"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/plan_current_tier_value"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/plan_loading"
+                    android:textColor="@color/clawphones_on_background"
+                    android:textSize="24sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/plan_usage_label"
+                    android:textColor="@color/clawphones_secondary_text"
+                    android:textSize="13sp" />
+
+                <ProgressBar
+                    android:id="@+id/plan_usage_progress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="8dp"
+                    android:layout_marginTop="10dp"
+                    android:max="100"
+                    android:progress="0" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/plan_usage_detail"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_loading"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/plan_usage_percent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_accent"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/plan_error_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:textColor="#FF8A80"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:text="@string/plan_comparison_title"
+                android:textColor="@color/clawphones_on_background"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/plan_tier_free_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:background="@drawable/clawphones_plan_card_bg"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/plan_tier_free_name"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_tier_free"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_free_current_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/clawphones_plan_current_badge_bg"
+                        android:paddingStart="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="2dp"
+                        android:text="@string/plan_current_badge"
+                        android:textColor="@color/clawphones_background"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_metric_context_length"
+                        android:textColor="@color/clawphones_secondary_text"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_free_context_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_metric_output_limit"
+                        android:textColor="@color/clawphones_secondary_text"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_free_output_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_metric_daily_cap"
+                        android:textColor="@color/clawphones_secondary_text"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_free_daily_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/plan_tier_pro_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:background="@drawable/clawphones_plan_card_bg"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/plan_tier_pro_name"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_tier_pro"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_pro_current_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/clawphones_plan_current_badge_bg"
+                        android:paddingStart="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="2dp"
+                        android:text="@string/plan_current_badge"
+                        android:textColor="@color/clawphones_background"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_metric_context_length"
+                        android:textColor="@color/clawphones_secondary_text"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_pro_context_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_metric_output_limit"
+                        android:textColor="@color/clawphones_secondary_text"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_pro_output_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_metric_daily_cap"
+                        android:textColor="@color/clawphones_secondary_text"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_pro_daily_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/plan_tier_max_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/clawphones_plan_card_bg"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/plan_tier_max_name"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_tier_max"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_max_current_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/clawphones_plan_current_badge_bg"
+                        android:paddingStart="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="2dp"
+                        android:text="@string/plan_current_badge"
+                        android:textColor="@color/clawphones_background"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_metric_context_length"
+                        android:textColor="@color/clawphones_secondary_text"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_max_context_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_metric_output_limit"
+                        android:textColor="@color/clawphones_secondary_text"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_max_output_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/plan_metric_daily_cap"
+                        android:textColor="@color/clawphones_secondary_text"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/plan_tier_max_daily_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/plan_value_unknown"
+                        android:textColor="@color/clawphones_on_background"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

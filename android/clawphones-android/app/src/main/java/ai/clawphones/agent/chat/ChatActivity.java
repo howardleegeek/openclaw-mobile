@@ -169,7 +169,7 @@ public class ChatActivity extends AppCompatActivity {
         execSafe(() -> {
             try {
                 List<Map<String, Object>> rows = new ArrayList<>(
-                    ClawPhonesAPI.getMessages(mToken, conversationId));
+                    ClawPhonesAPI.getMessages(ChatActivity.this, conversationId));
 
                 Collections.sort(rows, new Comparator<Map<String, Object>>() {
                     @Override
@@ -228,7 +228,7 @@ public class ChatActivity extends AppCompatActivity {
 
         execSafe(() -> {
             try {
-                String id = ClawPhonesAPI.createConversation(mToken);
+                String id = ClawPhonesAPI.createConversation(ChatActivity.this);
                 runSafe(() -> {
                     mConversationId = id;
                     updateAssistantMessage(idx, getString(R.string.chat_status_connected_ready));
@@ -291,7 +291,7 @@ public class ChatActivity extends AppCompatActivity {
 
         execSafe(() -> {
             final StringBuilder accumulated = new StringBuilder();
-            ClawPhonesAPI.chatStream(mToken, mConversationId, text, new ClawPhonesAPI.StreamCallback() {
+            ClawPhonesAPI.chatStream(ChatActivity.this, mConversationId, text, new ClawPhonesAPI.StreamCallback() {
                 @Override
                 public void onDelta(String delta) {
                     accumulated.append(delta);

@@ -128,8 +128,7 @@ public final class CrashReporter {
         File dir = new File(context.getFilesDir(), CRASH_DIR_NAME);
         if (!dir.exists() || !dir.isDirectory()) return;
 
-        String token = ClawPhonesAPI.getToken(context);
-        if (token == null || token.trim().isEmpty()) return;
+        if (ClawPhonesAPI.getToken(context) == null) return;
 
         File[] files = dir.listFiles((d, name) -> name != null && name.endsWith(".json"));
         if (files == null || files.length == 0) return;
@@ -139,7 +138,7 @@ public final class CrashReporter {
         for (File file : files) {
             try {
                 String json = readFile(file);
-                ClawPhonesAPI.postCrashReport(token, json);
+                ClawPhonesAPI.postCrashReport(context, json);
                 if (!file.delete()) {
                     Logger.logWarn(LOG_TAG, "Uploaded crash but failed to delete file: " + file.getName());
                 }

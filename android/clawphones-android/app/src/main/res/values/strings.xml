@@ -235,6 +235,10 @@
     <!-- Donate Preference -->
     <string name="donate_preference_title">Donate</string>
 
+    <!-- Plan Preference -->
+    <string name="plan_preference_title">Plan</string>
+    <string name="plan_preference_summary">View your current tier and token limits</string>
+
 
 
     <!-- ClawPhones Auth -->
@@ -278,7 +282,7 @@
 
 
     <!-- ClawPhones Conversation List -->
-    <string name="conversation_dialog_delete_confirm">确定删除这个对话吗？</string>
+    <string name="conversation_dialog_delete_confirm">确定删除此会话？</string>
     <string name="conversation_dialog_logout_confirm">确定退出登录吗？</string>
     <string name="conversation_action_delete">删除</string>
     <string name="conversation_action_cancel">取消</string>
@@ -290,6 +294,40 @@
     <string name="conversation_time_hours_ago">%1$d小时前</string>
     <string name="conversation_time_yesterday">昨天</string>
     <string name="conversation_message_count">%1$d条消息</string>
+    <string name="conversation_empty_state">暂无对话\n点击 + 开始聊天</string>
+
+    <!-- ClawPhones Chat Settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_section_plan">计划</string>
+    <string name="settings_plan_tier_placeholder">当前计划: -</string>
+    <string name="settings_plan_usage_placeholder">今日用量: - / -</string>
+    <string name="settings_plan_tier_value">当前计划: %1$s</string>
+    <string name="settings_plan_usage_value">今日用量: %1$d / %2$d</string>
+    <string name="settings_plan_usage_unknown">今日用量: %1$d / -</string>
+    <string name="settings_plan_refresh">刷新</string>
+
+    <string name="settings_section_ai_persona">AI Persona</string>
+    <string name="settings_persona_label">预设人设</string>
+    <string name="settings_persona_assistant">assistant（通用助手）</string>
+    <string name="settings_persona_coder">coder（编程助手）</string>
+    <string name="settings_persona_writer">writer（写作助手）</string>
+    <string name="settings_persona_translator">translator（翻译助手）</string>
+    <string name="settings_persona_custom">custom（自定义）</string>
+    <string name="settings_custom_prompt_label">自定义 system prompt</string>
+    <string name="settings_custom_prompt_hint">输入自定义系统提示词（最多 2000 字）</string>
+    <string name="settings_save_ai">保存 AI 设置</string>
+
+    <string name="settings_section_language">Language</string>
+    <string name="settings_language_auto">auto（自动）</string>
+    <string name="settings_language_zh">zh（中文）</string>
+    <string name="settings_language_en">en（English）</string>
+    <string name="settings_save_language">保存语言</string>
+
+    <string name="settings_saved_ai">AI 设置已保存</string>
+    <string name="settings_saved_language">语言设置已保存</string>
+    <string name="settings_error_load_failed">加载设置失败: %1$s</string>
+    <string name="settings_error_save_ai">保存 AI 设置失败: %1$s</string>
+    <string name="settings_error_save_language">保存语言失败: %1$s</string>
 
 
 
@@ -329,6 +367,19 @@
     <string name="login_error_http_status">HTTP %1$d</string>
     <string name="chat_error_http_status">HTTP %1$d</string>
 
+    <!-- ClawPhones Onboarding -->
+    <string name="onboarding_title_ai_assistant">AI Assistant</string>
+    <string name="onboarding_desc_ai_assistant">ClawPhones is your built-in AI assistant for everyday tasks, work, and creativity.</string>
+    <string name="onboarding_title_multiple_models">Multiple AI Models</string>
+    <string name="onboarding_desc_multiple_models">Switch between DeepSeek, Kimi, and Claude to get the best answer for each question.</string>
+    <string name="onboarding_title_data_privacy">Your Data, Your Device</string>
+    <string name="onboarding_desc_data_privacy">Privacy-first by design. Your chats and settings stay on your device whenever possible.</string>
+    <string name="onboarding_title_get_started">Get Started</string>
+    <string name="onboarding_desc_get_started">Create an account or log in to start chatting in seconds.</string>
+    <string name="onboarding_button_skip">Skip</string>
+    <string name="onboarding_button_next">Next</string>
+    <string name="onboarding_button_get_started">Get Started</string>
+
 
 
     <!-- ClawPhones Dashboard -->
@@ -352,6 +403,28 @@
     <string name="dashboard_device_ip_placeholder">&lt;设备 IP&gt;</string>
     <string name="dashboard_password_not_set">&lt;未设置&gt;</string>
     <string name="dashboard_ssh_info">ssh -p 8022 %1$s\n密码：%2$s</string>
+
+    <!-- ClawPhones Plan -->
+    <string name="plan_title">Plan</string>
+    <string name="plan_loading">加载中...</string>
+    <string name="plan_current_tier_label">当前套餐</string>
+    <string name="plan_usage_label">今日 Token 用量</string>
+    <string name="plan_usage_detail">%1$s / %2$s tokens</string>
+    <string name="plan_usage_detail_no_limit">%1$s tokens</string>
+    <string name="plan_usage_percent">%1$d%%</string>
+    <string name="plan_usage_percent_unavailable">—</string>
+    <string name="plan_comparison_title">套餐对比</string>
+    <string name="plan_current_badge">当前</string>
+    <string name="plan_metric_context_length">Context Length</string>
+    <string name="plan_metric_output_limit">Output Limit</string>
+    <string name="plan_metric_daily_cap">Daily Cap</string>
+    <string name="plan_metric_tokens">%1$s tokens</string>
+    <string name="plan_metric_tokens_per_day">%1$s tokens/day</string>
+    <string name="plan_tier_free">Free</string>
+    <string name="plan_tier_pro">Pro</string>
+    <string name="plan_tier_max">Max</string>
+    <string name="plan_value_unknown">—</string>
+    <string name="plan_error_load_failed">加载套餐信息失败，请稍后重试</string>
 
 
 

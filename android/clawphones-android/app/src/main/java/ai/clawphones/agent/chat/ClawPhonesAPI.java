@@ -19,7 +19,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -47,12 +49,27 @@ public class ClawPhonesAPI {
 
     private static final String PREFS = "clawphones_api";
     private static final String PREF_TOKEN = "token";
+    private static final String PREF_TOKEN_EXPIRES_AT = "token_expires_at";
+    private static final long TOKEN_TTL_SECONDS = 30L * 24L * 60L * 60L;
+    private static final long TOKEN_REFRESH_WINDOW_SECONDS = 7L * 24L * 60L * 60L;
+    private static final List<String> DEFAULT_PERSONAS = Arrays.asList(
+        "assistant", "coder", "writer", "translator", "custom");
 
     public static class ApiException extends Exception {
         public final int statusCode;
         public ApiException(int statusCode, String message) {
             super(message);
             this.statusCode = statusCode;
+        }
+    }
+
+    public static class AuthToken {
+        public final String token;
+        public final long expiresAt;
+
+        public AuthToken(String token, long expiresAt) {
+            this.token = token;
+            this.expiresAt = expiresAt;
         }
     }
 
@@ -72,6 +89,68 @@ public class ClawPhonesAPI {
         }
     }
 
+    /** Plan feature limits for a single tier. */
+    public static class PlanTier {
+        public final String tier;
+        public final long contextLength;
+        public final long outputLimit;
+        public final long dailyCap;
+
+        public PlanTier(String tier, long contextLength, long outputLimit, long dailyCap) {
+            this.tier = normalizeTierName(tier);
+            this.contextLength = contextLength;
+            this.outputLimit = outputLimit;
+            this.dailyCap = dailyCap;
+        }
+    }
+
+    /** Current user plan with usage and all tier limits. */
+    public static class UserPlan {
+        public final String currentTier;
+        public final long todayUsedTokens;
+        public final long dailyTokenLimit;
+        public final List<PlanTier> tiers;
+
+        public UserPlan(String currentTier, long todayUsedTokens, long dailyTokenLimit, List<PlanTier> tiers) {
+            this.currentTier = normalizeTierName(currentTier);
+            this.todayUsedTokens = Math.max(0L, todayUsedTokens);
+            this.dailyTokenLimit = Math.max(0L, dailyTokenLimit);
+            this.tiers = tiers == null ? new ArrayList<>() : tiers;
+        }
+    }
+
+    /** /v1/user/profile */
+    public static class UserProfile {
+        public final String userId;
+        public final String email;
+        public final String name;
+        public final String tier;
+        public final String language;
+
+        public UserProfile(String userId, String email, String name, String tier, String language) {
+            this.userId = userId;
+            this.email = email;
+            this.name = name;
+            this.tier = normalizeTierName(tier);
+            this.language = normalizeLanguage(language);
+        }
+    }
+
+    /** /v1/user/ai-config */
+    public static class AIConfig {
+        public final String persona;
+        public final String customPrompt; // nullable
+        public final Double temperature; // nullable
+        public final List<String> personas;
+
+        public AIConfig(String persona, String customPrompt, Double temperature, List<String> personas) {
+            this.persona = normalizePersona(persona);
+            this.customPrompt = customPrompt;
+            this.temperature = temperature;
+            this.personas = personas == null ? new ArrayList<>() : personas;
+        }
+    }
+
     /**
      * Callback interface for SSE streaming chat responses.
      */
@@ -87,11 +166,17 @@ public class ClawPhonesAPI {
     // ── SharedPreferences helpers ───────────────────────────────────────────────
 
     public static void saveToken(Context context, String token) {
+        saveToken(context, token, nowEpochSeconds() + TOKEN_TTL_SECONDS);
+    }
+
+    public static void saveToken(Context context, String token, long expiresAt) {
         if (context == null) return;
         if (token == null) return;
+        long normalizedExpiry = normalizeExpiry(expiresAt);
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(PREF_TOKEN, token)
+            .putLong(PREF_TOKEN_EXPIRES_AT, normalizedExpiry)
             .apply();
     }
 
@@ -101,7 +186,24 @@ public class ClawPhonesAPI {
         String t = sp.getString(PREF_TOKEN, null);
         if (t == null) return null;
         t = t.trim();
-        return t.isEmpty() ? null : t;
+        if (t.isEmpty()) return null;
+        long expiresAt = sp.getLong(PREF_TOKEN_EXPIRES_AT, 0L);
+        if (expiresAt > 0L && nowEpochSeconds() >= expiresAt) {
+            clearToken(context);
+            return null;
+        }
+        return t;
+    }
+
+    public static long getTokenExpiresAt(Context context) {
+        if (context == null) return 0L;
+        SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return sp.getLong(PREF_TOKEN_EXPIRES_AT, 0L);
+    }
+
+    public static boolean isTokenExpired(Context context) {
+        long expiresAt = getTokenExpiresAt(context);
+        return expiresAt > 0L && nowEpochSeconds() >= expiresAt;
     }
 
     public static void clearToken(Context context) {
@@ -109,37 +211,59 @@ public class ClawPhonesAPI {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .remove(PREF_TOKEN)
+            .remove(PREF_TOKEN_EXPIRES_AT)
             .apply();
     }
 
     // ── Auth ──────────────────────────────────────────────────────────────────
 
     /** POST /v1/auth/register -> token */
-    public static String register(String email, String password, String name)
+    public static AuthToken register(String email, String password, String name)
         throws IOException, ApiException, JSONException {
         JSONObject body = new JSONObject();
         body.put("email", email);
         body.put("password", password);
         body.put("name", name);
         JSONObject resp = doPost(BASE_URL + "/v1/auth/register", body, null);
-        return extractToken(resp);
+        return extractAuthToken(resp);
     }
 
     /** POST /v1/auth/login -> token */
-    public static String login(String email, String password)
+    public static AuthToken login(String email, String password)
         throws IOException, ApiException, JSONException {
         JSONObject body = new JSONObject();
         body.put("email", email);
         body.put("password", password);
         JSONObject resp = doPost(BASE_URL + "/v1/auth/login", body, null);
-        return extractToken(resp);
+        return extractAuthToken(resp);
+    }
+
+    /** POST /v1/auth/refresh -> new token */
+    public static AuthToken refresh(Context context)
+        throws IOException, ApiException, JSONException {
+        String currentToken = getToken(context);
+        if (currentToken == null || currentToken.trim().isEmpty()) {
+            throw new ApiException(401, "missing bearer token");
+        }
+        return refresh(context, currentToken.trim());
+    }
+
+    private static AuthToken refresh(Context context, String currentToken)
+        throws IOException, ApiException, JSONException {
+        JSONObject resp = doPost(BASE_URL + "/v1/auth/refresh", new JSONObject(), currentToken);
+        AuthToken refreshed = extractAuthToken(resp);
+        if (context != null) {
+            saveToken(context, refreshed.token, refreshed.expiresAt);
+        }
+        return refreshed;
     }
 
     // ── Conversations ─────────────────────────────────────────────────────────
 
     /** POST /v1/conversations -> conversationId */
-    public static String createConversation(String token)
+    public static String createConversation(Context context)
         throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
         JSONObject resp = doPost(BASE_URL + "/v1/conversations", new JSONObject(), token);
         String id = resp.optString("id", null);
         if (id == null || id.trim().isEmpty()) {
@@ -149,9 +273,9 @@ public class ClawPhonesAPI {
     }
 
     /** GET /v1/conversations -> list */
-    public static List<ConversationSummary> listConversations(String token)
+    public static List<ConversationSummary> listConversations(Context context)
         throws IOException, ApiException, JSONException {
-        List<Map<String, Object>> maps = getConversations(token);
+        List<Map<String, Object>> maps = getConversations(context);
         List<ConversationSummary> out = new ArrayList<>();
         for (Map<String, Object> map : maps) {
             out.add(new ConversationSummary(
@@ -166,8 +290,9 @@ public class ClawPhonesAPI {
     }
 
     /** GET /v1/conversations -> [{id,title,created_at,updated_at,message_count}, ...] */
-    public static List<Map<String, Object>> getConversations(String token)
+    public static List<Map<String, Object>> getConversations(Context context)
         throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
         Object resp = doGetAny(BASE_URL + "/v1/conversations", token);
         JSONArray arr = extractArray(resp, "conversations");
         List<Map<String, Object>> out = new ArrayList<>();
@@ -188,14 +313,16 @@ public class ClawPhonesAPI {
     }
 
     /** DELETE /v1/conversations/{id} -> 204 */
-    public static void deleteConversation(String token, String conversationId)
+    public static void deleteConversation(Context context, String conversationId)
         throws IOException, ApiException {
+        String token = resolveAuthTokenForRequest(context);
         doDeleteNoContent(BASE_URL + "/v1/conversations/" + conversationId, token);
     }
 
     /** GET /v1/conversations/{id} -> {id, title, messages:[{id,role,content,created_at}, ...]} */
-    public static List<Map<String, Object>> getMessages(String token, String conversationId)
+    public static List<Map<String, Object>> getMessages(Context context, String conversationId)
         throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
         Object resp = doGetAny(BASE_URL + "/v1/conversations/" + conversationId, token);
         JSONArray arr = extractArray(resp, "messages");
         List<Map<String, Object>> out = new ArrayList<>();
@@ -215,8 +342,9 @@ public class ClawPhonesAPI {
     }
 
     /** POST /v1/conversations/{id}/chat -> assistant content */
-    public static String chat(String token, String conversationId, String message)
+    public static String chat(Context context, String conversationId, String message)
         throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
         JSONObject body = new JSONObject();
         body.put("message", message);
         String url = BASE_URL + "/v1/conversations/" + conversationId + "/chat";
@@ -224,9 +352,57 @@ public class ClawPhonesAPI {
         return extractAssistantContent(resp);
     }
 
+    /** GET /v1/user/plan -> current tier + daily usage + tier comparison */
+    public static UserPlan getUserPlan(Context context)
+        throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
+        Object resp = doGetAny(BASE_URL + "/v1/user/plan", token);
+        return extractUserPlan(resp);
+    }
+
+    /** GET /v1/user/profile */
+    public static UserProfile getUserProfile(Context context)
+        throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
+        JSONObject resp = doGet(BASE_URL + "/v1/user/profile", token);
+        return extractUserProfile(resp);
+    }
+
+    /** PUT /v1/user/profile */
+    public static UserProfile updateUserProfile(Context context, String name, String language)
+        throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
+        JSONObject body = new JSONObject();
+        if (name != null) body.put("name", name);
+        if (language != null) body.put("language", language);
+        JSONObject resp = doPut(BASE_URL + "/v1/user/profile", body, token);
+        return extractUserProfile(resp);
+    }
+
+    /** GET /v1/user/ai-config */
+    public static AIConfig getAIConfig(Context context)
+        throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
+        JSONObject resp = doGet(BASE_URL + "/v1/user/ai-config", token);
+        return extractAIConfig(resp);
+    }
+
+    /** PUT /v1/user/ai-config */
+    public static AIConfig updateAIConfig(Context context, String persona, String customPrompt, Double temperature)
+        throws IOException, ApiException, JSONException {
+        String token = resolveAuthTokenForRequest(context);
+        JSONObject body = new JSONObject();
+        if (persona != null) body.put("persona", normalizePersona(persona));
+        if (customPrompt != null) body.put("custom_prompt", customPrompt);
+        if (temperature != null) body.put("temperature", temperature.doubleValue());
+        JSONObject resp = doPut(BASE_URL + "/v1/user/ai-config", body, token);
+        return extractAIConfig(resp);
+    }
+
     /** POST /v1/crash-reports -> 2xx */
-    public static void postCrashReport(String token, String jsonBody)
+    public static void postCrashReport(Context context, String jsonBody)
         throws IOException, ApiException {
+        String token = resolveAuthTokenForRequest(context);
         String body = jsonBody;
         if (body == null || body.trim().isEmpty()) {
             body = "{}";
@@ -238,13 +414,14 @@ public class ClawPhonesAPI {
      * POST /v1/conversations/{id}/chat/stream -> SSE streaming response.
      * Must be called from a background thread. Callbacks fire on the calling thread.
      */
-    public static void chatStream(String token, String conversationId, String message, StreamCallback callback) {
+    public static void chatStream(Context context, String conversationId, String message, StreamCallback callback) {
         if (callback == null) {
             throw new IllegalArgumentException("callback is required");
         }
 
         HttpURLConnection conn = null;
         try {
+            String token = resolveAuthTokenForRequest(context);
             JSONObject body = new JSONObject();
             body.put("message", message);
 
@@ -311,11 +488,65 @@ public class ClawPhonesAPI {
             }
 
             callback.onError(new IOException("stream closed before done event"));
-        } catch (IOException | JSONException e) {
+        } catch (IOException | JSONException | ApiException e) {
             callback.onError(e);
         } finally {
             if (conn != null) conn.disconnect();
         }
+    }
+
+    // ── Auth internals ────────────────────────────────────────────────────────
+
+    private static String resolveAuthTokenForRequest(Context context) throws ApiException {
+        String token = getToken(context);
+        if (token == null || token.trim().isEmpty()) {
+            throw new ApiException(401, "missing bearer token");
+        }
+
+        long now = nowEpochSeconds();
+        long expiresAt = getTokenExpiresAt(context);
+        if (expiresAt <= 0L) {
+            expiresAt = now + TOKEN_TTL_SECONDS;
+            saveToken(context, token, expiresAt);
+        }
+
+        if (now >= expiresAt) {
+            clearToken(context);
+            throw new ApiException(401, "token expired");
+        }
+
+        long remaining = expiresAt - now;
+        if (remaining < TOKEN_REFRESH_WINDOW_SECONDS) {
+            try {
+                AuthToken refreshed = refresh(context, token);
+                if (refreshed != null && refreshed.token != null && !refreshed.token.trim().isEmpty()) {
+                    token = refreshed.token.trim();
+                }
+            } catch (ApiException e) {
+                if (e.statusCode == 401) {
+                    clearToken(context);
+                    throw e;
+                }
+                if (e.statusCode != 400) {
+                    Logger.logWarn(LOG_TAG, "Token refresh failed (will continue with old token): " + e.getMessage());
+                }
+            } catch (IOException | JSONException e) {
+                Logger.logWarn(LOG_TAG, "Token refresh network/parse failure (will continue with old token): " + e.getMessage());
+            }
+        }
+
+        return token;
+    }
+
+    private static long nowEpochSeconds() {
+        return System.currentTimeMillis() / 1000L;
+    }
+
+    private static long normalizeExpiry(long expiresAt) {
+        if (expiresAt <= 0L) {
+            return nowEpochSeconds() + TOKEN_TTL_SECONDS;
+        }
+        return expiresAt;
     }
 
     // ── HTTP internals ────────────────────────────────────────────────────────
@@ -332,6 +563,16 @@ public class ClawPhonesAPI {
 
     private static JSONObject doPost(String urlStr, JSONObject body, String token) throws IOException, ApiException, JSONException {
         HttpURLConnection conn = openConnection(urlStr, "POST", token);
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        return readResponse(conn);
+    }
+
+    private static JSONObject doPut(String urlStr, JSONObject body, String token) throws IOException, ApiException, JSONException {
+        HttpURLConnection conn = openConnection(urlStr, "PUT", token);
         conn.setRequestProperty("Content-Type", "application/json");
         conn.setDoOutput(true);
         try (OutputStream os = conn.getOutputStream()) {
@@ -502,9 +743,237 @@ public class ClawPhonesAPI {
         }
     }
 
+    private static int asInt(Object v, int fallback) {
+        if (v == null) return fallback;
+        if (v instanceof Number) return ((Number) v).intValue();
+        try {
+            return Integer.parseInt(String.valueOf(v).trim());
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private static Double asDoubleOrNull(Object v) {
+        if (v == null) return null;
+        if (v instanceof Number) return ((Number) v).doubleValue();
+        try {
+            return Double.parseDouble(String.valueOf(v).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static UserPlan extractUserPlan(Object resp) {
+        JSONObject root = toObject(resp);
+        JSONObject data = optObject(root, "data", "result", "payload");
+        JSONObject scoped = data != null ? data : root;
+
+        String currentTier = coalesce(
+            optString(scoped, "current_tier", "currentTier", "tier", "plan"),
+            optString(root, "current_tier", "currentTier", "tier", "plan")
+        );
+
+        JSONObject currentPlanObj = optObject(scoped, "plan", "subscription", "current_plan", "currentPlan");
+        if (isBlank(currentTier) && currentPlanObj != null) {
+            currentTier = optString(currentPlanObj, "tier", "name", "id", "plan");
+        }
+
+        JSONObject usage = optObject(scoped, "usage", "token_usage", "today_usage", "daily_usage");
+        if (usage == null) usage = optObject(root, "usage", "token_usage", "today_usage", "daily_usage");
+
+        long used = firstPositive(
+            optLong(usage, "today_used", "todayUsed", "used", "used_tokens", "usedTokens",
+                "tokens_today", "tokensToday", "daily_used", "dailyUsed",
+                "messages", "messages_today", "used_today"),
+            optLong(scoped, "today_used", "todayUsed", "tokens_today", "tokensToday",
+                "daily_used", "dailyUsed", "messages", "messages_today", "used_today"),
+            optLong(root, "today_used", "todayUsed", "tokens_today", "tokensToday",
+                "daily_used", "dailyUsed", "messages", "messages_today", "used_today")
+        );
+
+        long limit = firstPositive(
+            optLong(usage, "daily_limit", "dailyLimit", "daily_cap", "dailyCap", "limit", "token_limit", "tokenLimit",
+                "daily_tokens", "messages_per_day", "daily_messages"),
+            optLong(scoped, "daily_limit", "dailyLimit", "daily_cap", "dailyCap", "token_limit", "tokenLimit",
+                "daily_tokens", "messages_per_day", "daily_messages"),
+            optLong(root, "daily_limit", "dailyLimit", "daily_cap", "dailyCap", "token_limit", "tokenLimit",
+                "daily_tokens", "messages_per_day", "daily_messages")
+        );
+
+        List<PlanTier> tiers = parsePlanTiers(scoped);
+        if (tiers.isEmpty() && scoped != root) {
+            tiers = parsePlanTiers(root);
+        }
+
+        if (limit <= 0L && !isBlank(currentTier)) {
+            String normalizedCurrent = normalizeTierName(currentTier);
+            for (PlanTier tier : tiers) {
+                if (normalizedCurrent.equals(normalizeTierName(tier.tier)) && tier.dailyCap > 0L) {
+                    limit = tier.dailyCap;
+                    break;
+                }
+            }
+        }
+
+        return new UserPlan(currentTier, used, limit, tiers);
+    }
+
+    private static List<PlanTier> parsePlanTiers(JSONObject scoped) {
+        ArrayList<PlanTier> parsed = new ArrayList<>();
+        if (scoped == null) return parsed;
+
+        JSONArray arr = optArray(scoped, "tiers", "plans", "plan_tiers", "comparison", "tier_comparison", "available_plans");
+        if (arr != null) {
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject item = arr.optJSONObject(i);
+                if (item == null) continue;
+                PlanTier tier = parsePlanTier(item, null);
+                if (tier != null) parsed.add(tier);
+            }
+        }
+
+        JSONObject obj = optObject(scoped, "tiers", "plans", "plan_tiers", "comparison", "tier_comparison");
+        if (obj != null) {
+            java.util.Iterator<String> it = obj.keys();
+            while (it.hasNext()) {
+                String key = it.next();
+                JSONObject item = obj.optJSONObject(key);
+                if (item == null) continue;
+                PlanTier tier = parsePlanTier(item, key);
+                if (tier != null) parsed.add(tier);
+            }
+        }
+
+        LinkedHashMap<String, PlanTier> dedup = new LinkedHashMap<>();
+        for (PlanTier tier : parsed) {
+            if (tier == null || isBlank(tier.tier)) continue;
+            dedup.put(normalizeTierName(tier.tier), tier);
+        }
+        return new ArrayList<>(dedup.values());
+    }
+
+    private static PlanTier parsePlanTier(JSONObject item, String fallbackTier) {
+        if (item == null) return null;
+
+        String tierName = coalesce(
+            optString(item, "tier", "name", "id", "plan"),
+            fallbackTier
+        );
+        if (isBlank(tierName)) return null;
+
+        JSONObject limits = optObject(item, "limits", "features", "quota");
+
+        long contextLength = firstPositive(
+            optLong(item, "context_length", "contextLength", "context_limit", "contextLimit", "max_context_tokens"),
+            optLong(limits, "context_length", "contextLength", "context_limit", "contextLimit", "max_context_tokens")
+        );
+
+        long outputLimit = firstPositive(
+            optLong(item, "output_limit", "outputLimit", "max_output_tokens", "max_tokens"),
+            optLong(limits, "output_limit", "outputLimit", "max_output_tokens", "max_tokens")
+        );
+
+        long dailyCap = firstPositive(
+            optLong(item, "daily_cap", "dailyCap", "daily_limit", "dailyLimit", "token_limit", "tokenLimit",
+                "daily_tokens", "messages_per_day", "daily_messages"),
+            optLong(limits, "daily_cap", "dailyCap", "daily_limit", "dailyLimit", "token_limit", "tokenLimit",
+                "daily_tokens", "messages_per_day", "daily_messages")
+        );
+
+        return new PlanTier(tierName, contextLength, outputLimit, dailyCap);
+    }
+
+    private static JSONObject toObject(Object value) {
+        if (value instanceof JSONObject) {
+            return (JSONObject) value;
+        }
+        if (value instanceof JSONArray) {
+            JSONArray arr = (JSONArray) value;
+            if (arr.length() > 0) {
+                JSONObject first = arr.optJSONObject(0);
+                if (first != null) return first;
+            }
+        }
+        return new JSONObject();
+    }
+
+    private static JSONObject optObject(JSONObject obj, String... keys) {
+        if (obj == null || keys == null) return null;
+        for (String key : keys) {
+            if (key == null) continue;
+            JSONObject child = obj.optJSONObject(key);
+            if (child != null) return child;
+        }
+        return null;
+    }
+
+    private static JSONArray optArray(JSONObject obj, String... keys) {
+        if (obj == null || keys == null) return null;
+        for (String key : keys) {
+            if (key == null) continue;
+            JSONArray arr = obj.optJSONArray(key);
+            if (arr != null) return arr;
+        }
+        return null;
+    }
+
+    private static String optString(JSONObject obj, String... keys) {
+        if (obj == null || keys == null) return null;
+        for (String key : keys) {
+            if (key == null || !obj.has(key) || obj.isNull(key)) continue;
+            Object raw = obj.opt(key);
+            if (raw instanceof JSONObject) continue;
+            String value = String.valueOf(raw).trim();
+            if (!value.isEmpty()) return value;
+        }
+        return null;
+    }
+
+    private static long optLong(JSONObject obj, String... keys) {
+        if (obj == null || keys == null) return -1L;
+        for (String key : keys) {
+            if (key == null || !obj.has(key) || obj.isNull(key)) continue;
+            Object raw = obj.opt(key);
+            long value = asLong(raw);
+            if (value >= 0L) return value;
+        }
+        return -1L;
+    }
+
+    private static long firstPositive(long... values) {
+        if (values == null) return 0L;
+        for (long value : values) {
+            if (value > 0L) return value;
+        }
+        return 0L;
+    }
+
+    private static String coalesce(String... values) {
+        if (values == null) return null;
+        for (String value : values) {
+            if (!isBlank(value)) return value.trim();
+        }
+        return null;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private static String normalizeTierName(String tier) {
+        if (tier == null) return "free";
+        String t = tier.trim().toLowerCase();
+        if (t.isEmpty()) return "free";
+        if ("basic".equals(t)) return "free";
+        if ("premium".equals(t)) return "pro";
+        if ("plus".equals(t)) return "pro";
+        if ("enterprise".equals(t)) return "max";
+        return t;
+    }
+
     // ── Response parsing ──────────────────────────────────────────────────────
 
-    private static String extractToken(JSONObject resp) throws JSONException {
+    private static AuthToken extractAuthToken(JSONObject resp) throws JSONException {
         if (resp == null) throw new JSONException("Empty response");
         String token = resp.optString("token", null);
         if (token == null || token.trim().isEmpty()) {
@@ -513,7 +982,9 @@ public class ClawPhonesAPI {
         if (token == null || token.trim().isEmpty()) {
             throw new JSONException("Missing token");
         }
-        return token.trim();
+        long expiresAt = resp.optLong("expires_at", 0L);
+        expiresAt = normalizeExpiry(expiresAt);
+        return new AuthToken(token.trim(), expiresAt);
     }
 
     private static String extractAssistantContent(JSONObject resp) {
@@ -561,5 +1032,70 @@ public class ClawPhonesAPI {
 
         // Fallback: show the raw JSON.
         return resp.toString();
+    }
+
+    private static UserProfile extractUserProfile(JSONObject resp) {
+        if (resp == null) {
+            return new UserProfile("", "", "", "free", "auto");
+        }
+        return new UserProfile(
+            resp.optString("user_id", ""),
+            resp.optString("email", ""),
+            resp.optString("name", ""),
+            resp.optString("tier", "free"),
+            resp.optString("language", "auto")
+        );
+    }
+
+    private static AIConfig extractAIConfig(JSONObject resp) {
+        JSONObject payload = resp == null ? null : resp.optJSONObject("ai_config");
+        if (payload == null) payload = resp;
+
+        String persona = "assistant";
+        String customPrompt = null;
+        Double temperature = null;
+        if (payload != null) {
+            persona = normalizePersona(payload.optString("persona", "assistant"));
+            customPrompt = asStringOrNull(payload.opt("custom_prompt"));
+            temperature = asDoubleOrNull(payload.opt("temperature"));
+        }
+
+        List<String> personas = new ArrayList<>();
+        if (resp != null) {
+            JSONArray arr = resp.optJSONArray("personas");
+            if (arr == null) arr = resp.optJSONArray("available_personas");
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    String p = normalizePersona(arr.optString(i, ""));
+                    if (!p.isEmpty() && !personas.contains(p)) {
+                        personas.add(p);
+                    }
+                }
+            }
+        }
+        for (String fallback : DEFAULT_PERSONAS) {
+            if (!personas.contains(fallback)) {
+                personas.add(fallback);
+            }
+        }
+        return new AIConfig(persona, customPrompt, temperature, personas);
+    }
+
+    private static String normalizeLanguage(String language) {
+        String normalized = language == null ? "" : language.trim().toLowerCase();
+        if (normalized.isEmpty()) return "auto";
+        if ("zh-cn".equals(normalized) || "zh-hans".equals(normalized)) return "zh";
+        if ("en-us".equals(normalized) || "en-gb".equals(normalized)) return "en";
+        return normalized;
+    }
+
+    private static String normalizePersona(String persona) {
+        String normalized = persona == null ? "" : persona.trim().toLowerCase();
+        if (normalized.isEmpty()) return "assistant";
+        if ("general".equals(normalized)) return "assistant";
+        if ("coding".equals(normalized)) return "coder";
+        if ("writing".equals(normalized)) return "writer";
+        if ("translation".equals(normalized)) return "translator";
+        return normalized;
     }
 }

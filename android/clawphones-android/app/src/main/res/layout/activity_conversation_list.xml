@@ -14,12 +14,24 @@
         app:titleTextColor="#F5F0E6">
 
         <ImageButton
+            android:id="@+id/conversation_settings"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/settings_title"
+            android:padding="8dp"
+            android:src="@android:drawable/ic_menu_manage"
+            android:tint="#F5F0E6" />
+
+        <ImageButton
             android:id="@+id/conversation_logout"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_gravity="end|center_vertical"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="退出登录"
+            android:contentDescription="@string/chat_menu_logout"
             android:padding="8dp"
             android:src="@android:drawable/ic_lock_power_off"
             android:tint="#F5F0E6" />
@@ -47,7 +59,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:gravity="center"
-            android:text="暂无对话\n点击 + 开始聊天"
+            android:text="@string/conversation_empty_state"
             android:textColor="#888888"
             android:textSize="16sp"
             android:visibility="gone" />
@@ -60,7 +72,7 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="20dp"
         android:backgroundTint="#E8A853"
-        android:contentDescription="新建对话"
+        android:contentDescription="@string/chat_new_conversation"
         android:elevation="6dp"
         android:padding="16dp"
         android:scaleType="centerInside"

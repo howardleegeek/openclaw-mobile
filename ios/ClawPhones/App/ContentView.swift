@@ -7,6 +7,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var auth = AuthViewModel()
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding: Bool = false
 
     private enum Tab: Hashable {
         case chat
@@ -35,13 +36,22 @@ struct ContentView: View {
         }
         .environmentObject(auth)
         .fullScreenCover(isPresented: Binding(
-            get: { !auth.isAuthenticated },
+            get: { hasSeenOnboarding && !auth.isAuthenticated },
             set: { _ in }
         )) {
             NavigationStack {
                 LoginView()
             }
             .environmentObject(auth)
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { !hasSeenOnboarding },
+            set: { _ in }
+        )) {
+            OnboardingView {
+                hasSeenOnboarding = true
+            }
+            .interactiveDismissDisabled()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ClawPhonesAuthExpired"))) { _ in
             auth.refreshAuthState()

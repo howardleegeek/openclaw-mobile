@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/clawphones_background"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="24dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="28dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_onboarding_skip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@android:color/transparent"
+            android:minHeight="0dp"
+            android:paddingStart="8dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="6dp"
+            android:text="@string/onboarding_button_skip"
+            android:textAllCaps="false"
+            android:textColor="@color/clawphones_secondary_text" />
+    </LinearLayout>
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/onboarding_view_pager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:id="@+id/onboarding_indicators"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingTop="8dp"
+        android:paddingBottom="10dp" />
+
+    <Button
+        android:id="@+id/btn_onboarding_primary"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:backgroundTint="@color/clawphones_accent"
+        android:text="@string/onboarding_button_next"
+        android:textAllCaps="false"
+        android:textColor="@color/clawphones_background"
+        android:textStyle="bold" />
+
+</LinearLayout>

@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/clawphones_background"
+    android:orientation="vertical">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/chat_settings_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/clawphones_background"
+        android:title="@string/settings_title"
+        android:titleTextColor="@color/clawphones_on_background" />
+
+    <ProgressBar
+        android:id="@+id/settings_loading"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:indeterminate="true"
+        android:visibility="gone" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_section_plan"
+                android:textColor="@color/clawphones_on_background"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/settings_plan_tier"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/settings_plan_tier_placeholder"
+                android:textColor="@color/clawphones_on_background"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/settings_plan_usage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/settings_plan_usage_placeholder"
+                android:textColor="@color/clawphones_secondary_text"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/settings_refresh_plan_btn"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/clawphones_button_outline_bg"
+                android:text="@string/settings_plan_refresh"
+                android:textAllCaps="false"
+                android:textColor="@color/clawphones_on_background"
+                android:textSize="13sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="16dp"
+                android:background="@color/clawphones_surface" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/settings_section_ai_persona"
+                android:textColor="@color/clawphones_on_background"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/settings_persona_label"
+                android:textColor="@color/clawphones_secondary_text"
+                android:textSize="13sp" />
+
+            <Spinner
+                android:id="@+id/settings_persona_spinner"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/clawphones_input_bg"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/settings_custom_prompt_label"
+                android:textColor="@color/clawphones_secondary_text"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/settings_custom_prompt_input"
+                android:layout_width="match_parent"
+                android:layout_height="130dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/clawphones_input_bg"
+                android:gravity="top|start"
+                android:hint="@string/settings_custom_prompt_hint"
+                android:inputType="textMultiLine|textCapSentences"
+                android:maxLength="2000"
+                android:padding="12dp"
+                android:textColor="@color/clawphones_on_background"
+                android:textColorHint="@color/clawphones_secondary_text"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/settings_save_ai_btn"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/clawphones_button_bg"
+                android:text="@string/settings_save_ai"
+                android:textAllCaps="false"
+                android:textColor="#1A1A1A"
+                android:textStyle="bold" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="16dp"
+                android:background="@color/clawphones_surface" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/settings_section_language"
+                android:textColor="@color/clawphones_on_background"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/settings_language_spinner"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/clawphones_input_bg"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp" />
+
+            <Button
+                android:id="@+id/settings_save_language_btn"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/clawphones_button_bg"
+                android:text="@string/settings_save_language"
+                android:textAllCaps="false"
+                android:textColor="#1A1A1A"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

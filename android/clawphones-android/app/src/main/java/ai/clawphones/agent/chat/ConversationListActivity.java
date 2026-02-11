@@ -73,11 +73,18 @@ public class ConversationListActivity extends AppCompatActivity {
         if (logout != null) {
             logout.setOnClickListener(v -> confirmLogout());
         }
+        ImageButton settings = findViewById(R.id.conversation_settings);
+        if (settings != null) {
+            settings.setOnClickListener(v -> {
+                Intent intent = new Intent(ConversationListActivity.this, ChatSettingsActivity.class);
+                startActivity(intent);
+            });
+        }
 
         mRecycler = findViewById(R.id.conversations_recycler);
         mEmptyState = findViewById(R.id.empty_state);
 
-        mAdapter = new ConversationAdapter(new ArrayList<>(), this::openConversation);
+        mAdapter = new ConversationAdapter(new ArrayList<>(), this::openConversation, this::onConversationLongPressed);
         mRecycler.setLayoutManager(new LinearLayoutManager(this));
         mRecycler.setAdapter(mAdapter);
 
@@ -137,28 +144,55 @@ public class ConversationListActivity extends AppCompatActivity {
                     mAdapter.notifyDataSetChanged();
                     return;
                 }
-
-                new AlertDialog.Builder(ConversationListActivity.this)
-                    .setMessage(getString(R.string.conversation_dialog_delete_confirm))
-                    .setNegativeButton(getString(R.string.conversation_action_cancel), (d, w) -> mAdapter.notifyItemChanged(position))
-                    .setOnCancelListener(d -> mAdapter.notifyItemChanged(position))
-                    .setPositiveButton(getString(R.string.conversation_action_delete), (d, w) -> deleteConversation(item.id, position))
-                    .show();
+                showDeleteConfirmation(item, position, true);
             }
         };
         new ItemTouchHelper(swipe).attachToRecyclerView(mRecycler);
     }
 
-    private void deleteConversation(String conversationId, int fallbackPosition) {
+    private void onConversationLongPressed(ClawPhonesAPI.ConversationSummary item, int fallbackPosition) {
+        showDeleteConfirmation(item, fallbackPosition, false);
+    }
+
+    private void showDeleteConfirmation(@Nullable ClawPhonesAPI.ConversationSummary item,
+                                        int fallbackPosition,
+                                        boolean fromSwipe) {
+        if (item == null || TextUtils.isEmpty(item.id)) {
+            if (fromSwipe) restoreSwipedItem(fallbackPosition);
+            return;
+        }
+
+        new AlertDialog.Builder(ConversationListActivity.this)
+            .setMessage(getString(R.string.conversation_dialog_delete_confirm))
+            .setNegativeButton(getString(R.string.conversation_action_cancel), (d, w) -> {
+                if (fromSwipe) restoreSwipedItem(fallbackPosition);
+            })
+            .setOnCancelListener(d -> {
+                if (fromSwipe) restoreSwipedItem(fallbackPosition);
+            })
+            .setPositiveButton(getString(R.string.conversation_action_delete),
+                (d, w) -> deleteConversation(item.id, fallbackPosition, fromSwipe))
+            .show();
+    }
+
+    private void restoreSwipedItem(int fallbackPosition) {
+        if (fallbackPosition >= 0 && fallbackPosition < mAdapter.getItemCount()) {
+            mAdapter.notifyItemChanged(fallbackPosition);
+        } else {
+            mAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void deleteConversation(String conversationId, int fallbackPosition, boolean fromSwipe) {
         execSafe(() -> {
             try {
-                ClawPhonesAPI.deleteConversation(mToken, conversationId);
+                ClawPhonesAPI.deleteConversation(ConversationListActivity.this, conversationId);
                 runSafe(() -> {
                     int idx = mAdapter.removeById(conversationId);
                     if (idx >= 0) {
                         mAdapter.notifyItemRemoved(idx);
-                    } else if (fallbackPosition >= 0) {
-                        mAdapter.notifyItemChanged(fallbackPosition);
+                    } else if (fromSwipe) {
+                        restoreSwipedItem(fallbackPosition);
                     }
                     updateEmptyState();
                 });
@@ -169,12 +203,12 @@ public class ConversationListActivity extends AppCompatActivity {
                         redirectToLogin();
                         return;
                     }
-                    mAdapter.notifyItemChanged(fallbackPosition);
+                    if (fromSwipe) restoreSwipedItem(fallbackPosition);
                     toast(getString(R.string.conversation_error_delete_failed));
                 });
             } catch (IOException e) {
                 runSafe(() -> {
-                    mAdapter.notifyItemChanged(fallbackPosition);
+                    if (fromSwipe) restoreSwipedItem(fallbackPosition);
                     toast(getString(R.string.conversation_error_delete_failed));
                 });
             }
@@ -191,7 +225,7 @@ public class ConversationListActivity extends AppCompatActivity {
         execSafe(() -> {
             try {
                 List<ClawPhonesAPI.ConversationSummary> conversations =
-                    new ArrayList<>(ClawPhonesAPI.listConversations(mToken));
+                    new ArrayList<>(ClawPhonesAPI.listConversations(ConversationListActivity.this));
                 Collections.sort(conversations, new Comparator<ClawPhonesAPI.ConversationSummary>() {
                     @Override
                     public int compare(ClawPhonesAPI.ConversationSummary a, ClawPhonesAPI.ConversationSummary b) {
@@ -313,15 +347,22 @@ public class ConversationListActivity extends AppCompatActivity {
         void onClick(ClawPhonesAPI.ConversationSummary item);
     }
 
+    private interface OnConversationLongClickListener {
+        void onLongClick(ClawPhonesAPI.ConversationSummary item, int adapterPosition);
+    }
+
     private static final class ConversationAdapter extends RecyclerView.Adapter<ConversationAdapter.VH> {
 
         private final ArrayList<ClawPhonesAPI.ConversationSummary> mItems;
         private final OnConversationClickListener mListener;
+        private final OnConversationLongClickListener mLongListener;
 
         ConversationAdapter(ArrayList<ClawPhonesAPI.ConversationSummary> items,
-                            OnConversationClickListener listener) {
+                            OnConversationClickListener listener,
+                            OnConversationLongClickListener longListener) {
             mItems = items;
             mListener = listener;
+            mLongListener = longListener;
         }
 
         void replaceAll(List<ClawPhonesAPI.ConversationSummary> newItems) {
@@ -359,7 +400,7 @@ public class ConversationListActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull VH holder, int position) {
             ClawPhonesAPI.ConversationSummary item = mItems.get(position);
-            holder.bind(item, mListener);
+            holder.bind(item, mListener, mLongListener);
         }
 
         @Override
@@ -379,7 +420,9 @@ public class ConversationListActivity extends AppCompatActivity {
                 count = itemView.findViewById(R.id.conversation_count);
             }
 
-            void bind(ClawPhonesAPI.ConversationSummary item, OnConversationClickListener listener) {
+            void bind(ClawPhonesAPI.ConversationSummary item,
+                      OnConversationClickListener listener,
+                      OnConversationLongClickListener longListener) {
                 android.content.Context context = itemView.getContext();
                 String safeTitle = TextUtils.isEmpty(item.title)
                     ? context.getString(R.string.chat_new_conversation)
@@ -392,6 +435,11 @@ public class ConversationListActivity extends AppCompatActivity {
 
                 itemView.setOnClickListener(v -> {
                     if (listener != null) listener.onClick(item);
+                });
+                itemView.setOnLongClickListener(v -> {
+                    if (longListener == null) return false;
+                    longListener.onLongClick(item, getBindingAdapterPosition());
+                    return true;
                 });
             }
         }

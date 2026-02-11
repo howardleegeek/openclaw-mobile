@@ -124,6 +124,9 @@ LIMITS: Dict[str, TierLimits] = {
     "max": TierLimits(max_context_tokens=64_000, max_output_tokens=2048, daily_tokens=1_200_000),
 }
 
+TOKEN_TTL_SECONDS = 30 * 86400
+TOKEN_REFRESH_WINDOW_SECONDS = 7 * 86400
+
 _CALL_LLM_BODY: ContextVar[Optional[Dict[str, Any]]] = ContextVar("_CALL_LLM_BODY", default=None)
 
 PERSONA_PROMPTS: Dict[str, str] = {
@@ -226,6 +229,27 @@ def _gen_device_token() -> str:
     return "ocw1_" + base64.urlsafe_b64encode(secrets.token_bytes(24)).decode("utf-8").rstrip("=")
 
 
+async def _mint_device_token_for_user(
+    db: Any,
+    *,
+    user_id: str,
+    tier: str,
+    now: int,
+    expires_at: Optional[int],
+) -> str:
+    for _ in range(5):
+        candidate = _gen_device_token()
+        try:
+            await db.execute(
+                "INSERT INTO device_tokens(token,tier,status,note,user_id,created_at,expires_at) VALUES (?,?,?,?,?,?,?)",
+                (candidate, tier, "active", None, user_id, now, expires_at),
+            )
+            return candidate
+        except sqlite3.IntegrityError:
+            continue
+    raise HTTPException(status_code=500, detail="failed to allocate token")
+
+
 def _safe_json_loads_object(s: Any) -> Dict[str, Any]:
     if isinstance(s, dict):
         return s
@@ -288,7 +312,8 @@ async def _init_db() -> None:
               ai_config TEXT DEFAULT '{}',
               language TEXT DEFAULT 'auto',
               created_at INTEGER,
-              updated_at INTEGER
+              updated_at INTEGER,
+              last_refresh_at INTEGER
             );
             """
         )
@@ -314,6 +339,11 @@ async def _init_db() -> None:
         # NULL means never expires (backwards compatible).
         try:
             await db.execute("ALTER TABLE device_tokens ADD COLUMN expires_at INTEGER")
+        except Exception:
+            pass
+        # Migration for existing DBs: add last_refresh_at to users.
+        try:
+            await db.execute("ALTER TABLE users ADD COLUMN last_refresh_at INTEGER")
         except Exception:
             pass
         await db.execute(
@@ -842,7 +872,7 @@ async def auth_register(request: Request) -> Any:
     if len(password) < 8 or len(password) > 72:
         raise HTTPException(status_code=400, detail="Password must be 8-72 characters")
     now = int(time.time())
-    expires_at = now + 30 * 86400
+    expires_at = now + TOKEN_TTL_SECONDS
     user_id = str(uuid.uuid4())
 
     pw_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -863,25 +893,17 @@ async def auth_register(request: Request) -> Any:
             # Unique constraint on users.email.
             raise HTTPException(status_code=409, detail="email already registered")
 
-        token: Optional[str] = None
-        for _ in range(5):
-            candidate = _gen_device_token()
-            try:
-                await db.execute(
-                    "INSERT INTO device_tokens(token,tier,status,note,user_id,created_at,expires_at) VALUES (?,?,?,?,?,?,?)",
-                    (candidate, tier, "active", None, user_id, now, expires_at),
-                )
-                token = candidate
-                break
-            except sqlite3.IntegrityError:
-                continue
-
-        if not token:
-            raise HTTPException(status_code=500, detail="failed to allocate token")
+        token = await _mint_device_token_for_user(
+            db,
+            user_id=user_id,
+            tier=tier,
+            now=now,
+            expires_at=expires_at,
+        )
 
         await db.commit()
 
-    return {"user_id": user_id, "token": token, "tier": tier, "created_at": now}
+    return {"user_id": user_id, "token": token, "tier": tier, "created_at": now, "expires_at": expires_at}
 
 
 @app.post("/v1/auth/login")
@@ -902,7 +924,7 @@ async def auth_login(request: Request) -> Any:
 
     ip = _client_ip(request)
     now = int(time.time())
-    expires_at = now + 30 * 86400
+    expires_at = now + TOKEN_TTL_SECONDS
     if _is_login_rate_limited(ip, now):
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again in 5 minutes")
 
@@ -933,21 +955,13 @@ async def auth_login(request: Request) -> Any:
     user_id = str(user["id"])
 
     async with aiosqlite.connect(TOKEN_DB_PATH) as db:
-        token: Optional[str] = None
-        for _ in range(5):
-            candidate = _gen_device_token()
-            try:
-                await db.execute(
-                    "INSERT INTO device_tokens(token,tier,status,note,user_id,created_at,expires_at) VALUES (?,?,?,?,?,?,?)",
-                    (candidate, tier, "active", None, user_id, now, expires_at),
-                )
-                token = candidate
-                break
-            except sqlite3.IntegrityError:
-                continue
-
-        if not token:
-            raise HTTPException(status_code=500, detail="failed to allocate token")
+        token = await _mint_device_token_for_user(
+            db,
+            user_id=user_id,
+            tier=tier,
+            now=now,
+            expires_at=expires_at,
+        )
 
         await db.commit()
 
@@ -955,7 +969,80 @@ async def auth_login(request: Request) -> Any:
     _LOGIN_FAILURES.pop(ip, None)
 
     ai_config = _safe_json_loads_object(user.get("ai_config"))
-    return {"user_id": user_id, "token": token, "tier": tier, "name": user.get("name") or "", "ai_config": ai_config}
+    return {
+        "user_id": user_id,
+        "token": token,
+        "tier": tier,
+        "name": user.get("name") or "",
+        "ai_config": ai_config,
+        "expires_at": expires_at,
+    }
+
+
+@app.post("/v1/auth/refresh")
+async def auth_refresh(request: Request) -> Any:
+    old_token = _require_device_token(request)
+    now = int(time.time())
+
+    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            async with db.execute(
+                "SELECT token,tier,status,user_id,expires_at FROM device_tokens WHERE token=?",
+                (old_token,),
+            ) as cur:
+                token_row = await cur.fetchone()
+        except sqlite3.OperationalError:
+            token_row = None
+
+        if not token_row:
+            raise HTTPException(status_code=401, detail="invalid token")
+        if (token_row["status"] or "") != "active":
+            raise HTTPException(status_code=403, detail="token disabled")
+        user_id = token_row["user_id"]
+        if not user_id:
+            raise HTTPException(status_code=401, detail="token not associated with user")
+
+        exp: Any = token_row["expires_at"]
+        if not isinstance(exp, int) or exp <= 0:
+            raise HTTPException(status_code=400, detail="token is not refreshable")
+        if now >= exp:
+            raise HTTPException(status_code=401, detail="token expired")
+        if (exp - now) >= TOKEN_REFRESH_WINDOW_SECONDS:
+            raise HTTPException(status_code=400, detail="refresh only allowed in the last 7 days")
+
+        async with db.execute("SELECT tier FROM users WHERE id=?", (str(user_id),)) as cur:
+            user_row = await cur.fetchone()
+        if not user_row:
+            raise HTTPException(status_code=401, detail="user not found")
+        tier = str(user_row["tier"] or token_row["tier"] or "free")
+        if tier not in LIMITS:
+            tier = "free"
+
+        expires_at = now + TOKEN_TTL_SECONDS
+        new_token = await _mint_device_token_for_user(
+            db,
+            user_id=str(user_id),
+            tier=tier,
+            now=now,
+            expires_at=expires_at,
+        )
+
+        # Preserve user data continuity and rotate away from the old token.
+        await db.execute("UPDATE conversations SET device_token=? WHERE device_token=?", (new_token, old_token))
+        await db.execute("UPDATE usage_daily SET token=? WHERE token=?", (new_token, old_token))
+        await db.execute("UPDATE crash_reports SET device_token=? WHERE device_token=?", (new_token, old_token))
+        await db.execute(
+            "UPDATE device_tokens SET status='disabled', note=?, expires_at=? WHERE token=?",
+            ("rotated_by_refresh", now, old_token),
+        )
+        await db.execute(
+            "UPDATE users SET last_refresh_at=?, updated_at=? WHERE id=?",
+            (now, now, str(user_id)),
+        )
+        await db.commit()
+
+    return {"token": new_token, "tier": tier, "expires_at": expires_at}
 
 
 @app.get("/v1/user/profile")

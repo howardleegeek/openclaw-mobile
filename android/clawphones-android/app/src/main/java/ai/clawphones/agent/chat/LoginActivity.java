@@ -129,13 +129,13 @@ public class LoginActivity extends AppCompatActivity {
         try {
             exec.execute(() -> {
                 try {
-                    String token;
+                    ClawPhonesAPI.AuthToken authToken;
                     if (register) {
-                        token = ClawPhonesAPI.register(email, password, name);
+                        authToken = ClawPhonesAPI.register(email, password, name);
                     } else {
-                        token = ClawPhonesAPI.login(email, password);
+                        authToken = ClawPhonesAPI.login(email, password);
                     }
-                    ClawPhonesAPI.saveToken(LoginActivity.this, token);
+                    ClawPhonesAPI.saveToken(LoginActivity.this, authToken.token, authToken.expiresAt);
                     if (!mDestroyed) {
                         runOnUiThread(this::openConversationListAndFinish);
                     }

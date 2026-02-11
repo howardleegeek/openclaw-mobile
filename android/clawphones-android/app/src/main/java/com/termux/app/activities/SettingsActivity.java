@@ -1,6 +1,7 @@
 package com.termux.app.activities;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Environment;
 
@@ -25,6 +26,8 @@ import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.activity.media.AppCompatActivityUtils;
 import com.termux.shared.theme.NightMode;
+
+import ai.clawphones.agent.chat.PlanActivity;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -67,6 +70,7 @@ public class SettingsActivity extends AppCompatActivity {
                     configureTermuxFloatPreference(context);
                     configureTermuxTaskerPreference(context);
                     configureTermuxWidgetPreference(context);
+                    configurePlanPreference();
                     configureAboutPreference(context);
                     configureDonatePreference(context);
                 }
@@ -107,6 +111,18 @@ public class SettingsActivity extends AppCompatActivity {
                 // If failed to get app preferences, then likely app is not installed, so do not show its preference
                 termuxWidgetPreference.setVisible(preferences != null);
             }
+        }
+
+        private void configurePlanPreference() {
+            Preference planPreference = findPreference("clawphones_plan");
+            if (planPreference == null) return;
+            planPreference.setOnPreferenceClickListener(preference -> {
+                Context context = getContext();
+                if (context != null) {
+                    startActivity(new Intent(context, PlanActivity.class));
+                }
+                return true;
+            });
         }
 
         private void configureAboutPreference(@NonNull Context context) {

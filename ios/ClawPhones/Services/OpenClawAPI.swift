@@ -10,6 +10,8 @@ import Foundation
 final class OpenClawAPI {
     static let shared = OpenClawAPI()
     private init() {}
+    private let tokenTTLSeconds = 30 * 24 * 60 * 60
+    private let tokenRefreshWindowSeconds = 7 * 24 * 60 * 60
 
     private var baseURLString: String {
         DeviceConfig.shared.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -25,11 +27,13 @@ final class OpenClawAPI {
         let userId: String
         let token: String
         let tier: String
+        let expiresAt: Int?
 
         enum CodingKeys: String, CodingKey {
             case userId = "user_id"
             case token
             case tier
+            case expiresAt = "expires_at"
         }
     }
 
@@ -39,6 +43,7 @@ final class OpenClawAPI {
         let tier: String
         let name: String?
         let aiConfig: AIConfigResponse?
+        let expiresAt: Int?
 
         enum CodingKeys: String, CodingKey {
             case userId = "user_id"
@@ -46,6 +51,19 @@ final class OpenClawAPI {
             case tier
             case name
             case aiConfig = "ai_config"
+            case expiresAt = "expires_at"
+        }
+    }
+
+    struct AuthRefreshResponse: Codable, Hashable {
+        let token: String
+        let tier: String?
+        let expiresAt: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case token
+            case tier
+            case expiresAt = "expires_at"
         }
     }
 
@@ -141,6 +159,24 @@ final class OpenClawAPI {
         return try decode(AuthLoginResponse.self, from: data)
     }
 
+    func refresh() async throws -> AuthRefreshResponse {
+        guard let token = DeviceConfig.shared.deviceToken, !token.isEmpty else {
+            throw ClawPhonesError.noDeviceToken
+        }
+
+        let url = URL(string: "\(baseURLString)/v1/auth/refresh")!
+        var request = request(url: url, method: "POST")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = Data("{}".utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+
+        return try decode(AuthRefreshResponse.self, from: data)
+    }
+
     func loginWithApple(identityToken: String) async throws -> AuthLoginResponse {
         // TODO: backend endpoint not finalized; keeping a stub so UI can ship.
         throw ClawPhonesError.apiError("Sign in with Apple is coming soon.")
@@ -150,7 +186,7 @@ final class OpenClawAPI {
 
     func getUserProfile() async throws -> UserProfileResponse {
         let url = URL(string: "\(baseURLString)/v1/user/profile")!
-        var request = try authorizedRequest(url: url, method: "GET")
+        var request = try await authorizedRequest(url: url, method: "GET")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -161,7 +197,7 @@ final class OpenClawAPI {
 
     func updateUserProfile(name: String?, language: String?) async throws -> UserProfileResponse {
         let url = URL(string: "\(baseURLString)/v1/user/profile")!
-        var request = try authorizedRequest(url: url, method: "PUT")
+        var request = try await authorizedRequest(url: url, method: "PUT")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
@@ -176,7 +212,7 @@ final class OpenClawAPI {
 
     func updatePassword(oldPassword: String, newPassword: String) async throws -> Bool {
         let url = URL(string: "\(baseURLString)/v1/user/password")!
-        var request = try authorizedRequest(url: url, method: "PUT")
+        var request = try await authorizedRequest(url: url, method: "PUT")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
@@ -190,7 +226,7 @@ final class OpenClawAPI {
 
     func getPlan() async throws -> PlanResponse {
         let url = URL(string: "\(baseURLString)/v1/user/plan")!
-        var request = try authorizedRequest(url: url, method: "GET")
+        var request = try await authorizedRequest(url: url, method: "GET")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -201,7 +237,7 @@ final class OpenClawAPI {
 
     func getAIConfig() async throws -> AIConfigResponse {
         let url = URL(string: "\(baseURLString)/v1/user/ai-config")!
-        var request = try authorizedRequest(url: url, method: "GET")
+        var request = try await authorizedRequest(url: url, method: "GET")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -212,7 +248,7 @@ final class OpenClawAPI {
 
     func updateAIConfig(persona: String?, customPrompt: String?, temperature: Double?) async throws -> AIConfigResponse {
         let url = URL(string: "\(baseURLString)/v1/user/ai-config")!
-        var request = try authorizedRequest(url: url, method: "PUT")
+        var request = try await authorizedRequest(url: url, method: "PUT")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
@@ -229,7 +265,7 @@ final class OpenClawAPI {
 
     func createConversation(systemPrompt: String? = nil) async throws -> Conversation {
         let url = URL(string: "\(baseURLString)/v1/conversations")!
-        var request = try authorizedRequest(url: url, method: "POST")
+        var request = try await authorizedRequest(url: url, method: "POST")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
@@ -253,7 +289,7 @@ final class OpenClawAPI {
         ]
         let url = components.url!
 
-        var request = try authorizedRequest(url: url, method: "GET")
+        var request = try await authorizedRequest(url: url, method: "GET")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -265,7 +301,7 @@ final class OpenClawAPI {
 
     func getConversation(id: String) async throws -> ConversationDetail {
         let url = URL(string: "\(baseURLString)/v1/conversations/\(id)")!
-        var request = try authorizedRequest(url: url, method: "GET")
+        var request = try await authorizedRequest(url: url, method: "GET")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -276,7 +312,7 @@ final class OpenClawAPI {
 
     func chat(conversationId: String, message: String) async throws -> ChatMessageResponse {
         let url = URL(string: "\(baseURLString)/v1/conversations/\(conversationId)/chat")!
-        var request = try authorizedRequest(url: url, method: "POST")
+        var request = try await authorizedRequest(url: url, method: "POST")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -294,7 +330,7 @@ final class OpenClawAPI {
             let task = Task {
                 do {
                     let url = URL(string: "\(baseURLString)/v1/conversations/\(conversationId)/chat/stream")!
-                    var request = try authorizedRequest(url: url, method: "POST")
+                    var request = try await authorizedRequest(url: url, method: "POST")
                     request.timeoutInterval = 300
                     request.addValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.addValue("text/event-stream", forHTTPHeaderField: "Accept")
@@ -371,7 +407,7 @@ final class OpenClawAPI {
 
     func deleteConversation(id: String) async throws -> Bool {
         let url = URL(string: "\(baseURLString)/v1/conversations/\(id)")!
-        var request = try authorizedRequest(url: url, method: "DELETE")
+        var request = try await authorizedRequest(url: url, method: "DELETE")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -445,15 +481,67 @@ final class OpenClawAPI {
         return request
     }
 
-    private func authorizedRequest(url: URL, method: String) throws -> URLRequest {
-        guard let token = DeviceConfig.shared.deviceToken, !token.isEmpty else {
-            throw ClawPhonesError.noDeviceToken
-        }
-
+    private func authorizedRequest(url: URL, method: String) async throws -> URLRequest {
+        let token = try await validTokenForAuthorizedRequest()
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return request
+    }
+
+    private func validTokenForAuthorizedRequest() async throws -> String {
+        guard let token = DeviceConfig.shared.deviceToken, !token.isEmpty else {
+            throw ClawPhonesError.noDeviceToken
+        }
+
+        let now = Int(Date().timeIntervalSince1970)
+        var expiresAt = DeviceConfig.shared.tokenExpiresAt ?? 0
+        if expiresAt <= 0 {
+            expiresAt = now + tokenTTLSeconds
+            DeviceConfig.shared.tokenExpiresAt = expiresAt
+        }
+
+        if now >= expiresAt {
+            expireAuthSession()
+            throw ClawPhonesError.unauthorized
+        }
+
+        let remaining = expiresAt - now
+        if remaining < tokenRefreshWindowSeconds {
+            do {
+                let refreshed = try await refresh()
+                let refreshedToken = refreshed.token.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !refreshedToken.isEmpty else {
+                    throw ClawPhonesError.unauthorized
+                }
+                DeviceConfig.shared.saveUserToken(
+                    refreshedToken,
+                    expiresAt: normalizeExpiry(refreshed.expiresAt)
+                )
+                return refreshedToken
+            } catch let err as ClawPhonesError {
+                if case .unauthorized = err {
+                    throw err
+                }
+                // Keep current token on refresh failure to avoid blocking user requests.
+            } catch {
+                // Keep current token on refresh failure to avoid blocking user requests.
+            }
+        }
+
+        return token
+    }
+
+    private func normalizeExpiry(_ raw: Int?) -> Int {
+        if let raw, raw > 0 {
+            return raw
+        }
+        return Int(Date().timeIntervalSince1970) + tokenTTLSeconds
+    }
+
+    private func expireAuthSession() {
+        DeviceConfig.shared.clearTokens()
+        NotificationCenter.default.post(name: Notification.Name("ClawPhonesAuthExpired"), object: nil)
     }
 
     private func validate(response: URLResponse, data: Data) throws {
@@ -475,9 +563,7 @@ final class OpenClawAPI {
 
             if httpResponse.statusCode == 401 {
                 // Auto-clear invalid token
-                DeviceConfig.shared.clearTokens()
-                // Post notification so UI can react
-                NotificationCenter.default.post(name: Notification.Name("ClawPhonesAuthExpired"), object: nil)
+                expireAuthSession()
                 throw ClawPhonesError.unauthorized
             }
 

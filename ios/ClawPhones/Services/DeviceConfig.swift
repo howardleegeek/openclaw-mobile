@@ -13,6 +13,7 @@ class DeviceConfig {
 
     // Managed App Configuration (MDM) keys (also used for local overrides in dev builds)
     static let managedDeviceTokenKey = "ai.openclaw.device_token"
+    static let managedTokenExpiresAtKey = "ai.openclaw.token_expires_at"
     static let managedBaseURLKey = "ai.openclaw.base_url"
     static let managedModeKey = "ai.openclaw.mode"
 
@@ -74,20 +75,54 @@ class DeviceConfig {
 
     /// Check if device is provisioned
     var isProvisioned: Bool {
-        return deviceToken != nil
+        guard deviceToken != nil else { return false }
+        if let expiresAt = tokenExpiresAt,
+           expiresAt > 0,
+           Int(Date().timeIntervalSince1970) >= expiresAt {
+            clearTokens()
+            return false
+        }
+        return true
     }
 
     /// Save user-authenticated token (fallback for non-Oyster devices)
-    func saveUserToken(_ token: String) {
+    func saveUserToken(_ token: String, expiresAt: Int? = nil) {
         // Write to BOTH UserDefaults (highest priority in getter) AND Keychain.
         // This ensures the getter always returns the freshest token.
         UserDefaults.standard.set(token, forKey: Self.managedDeviceTokenKey)
+        if let expiresAt, expiresAt > 0 {
+            UserDefaults.standard.set(expiresAt, forKey: Self.managedTokenExpiresAtKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.managedTokenExpiresAtKey)
+        }
         _ = KeychainHelper.shared.writeDeviceToken(token)
+    }
+
+    var tokenExpiresAt: Int? {
+        get {
+            let value = UserDefaults.standard.object(forKey: Self.managedTokenExpiresAtKey)
+            if let intValue = value as? Int, intValue > 0 {
+                return intValue
+            }
+            if let numberValue = value as? NSNumber {
+                let intValue = numberValue.intValue
+                return intValue > 0 ? intValue : nil
+            }
+            return nil
+        }
+        set {
+            if let newValue, newValue > 0 {
+                UserDefaults.standard.set(newValue, forKey: Self.managedTokenExpiresAtKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.managedTokenExpiresAtKey)
+            }
+        }
     }
 
     /// Clear all stored tokens (for testing)
     func clearTokens() {
         KeychainHelper.shared.clearAll()
         UserDefaults.standard.removeObject(forKey: Self.managedDeviceTokenKey)
+        UserDefaults.standard.removeObject(forKey: Self.managedTokenExpiresAtKey)
     }
 }

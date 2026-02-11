@@ -102,6 +102,11 @@
         </activity>
 
         <activity
+            android:name="ai.clawphones.agent.OnboardingActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+
+        <activity
             android:name="ai.clawphones.agent.SetupActivity"
             android:exported="false"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
@@ -126,6 +131,17 @@
             android:name="ai.clawphones.agent.chat.ChatActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.ChatSettingsActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.PlanActivity"
+            android:exported="false"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 
         <activity
