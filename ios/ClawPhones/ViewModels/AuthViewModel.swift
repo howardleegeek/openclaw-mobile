@@ -11,8 +11,23 @@ final class AuthViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
 
+    private var authObserver: Any?
+
     init() {
         self.isAuthenticated = DeviceConfig.shared.isProvisioned
+        authObserver = NotificationCenter.default.addObserver(
+            forName: .clawPhonesAuthDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshAuthState()
+        }
+    }
+
+    deinit {
+        if let obs = authObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
     }
 
     func refreshAuthState() {

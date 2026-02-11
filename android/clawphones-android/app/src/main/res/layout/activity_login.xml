@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:background="@color/clawphones_background">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="ClawPhones AI"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:textColor="@color/clawphones_on_background" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="18dp"
+        android:text="Login to chat"
+        android:textSize="13sp"
+        android:textColor="@color/clawphones_secondary_text" />
+
+    <EditText
+        android:id="@+id/login_email"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:hint="Email"
+        android:inputType="textEmailAddress"
+        android:background="@drawable/clawphones_input_bg"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:textColor="@color/clawphones_on_background"
+        android:textColorHint="@color/clawphones_secondary_text"
+        android:singleLine="true" />
+
+    <EditText
+        android:id="@+id/login_password"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="12dp"
+        android:hint="Password (min 8 chars)"
+        android:inputType="textPassword"
+        android:background="@drawable/clawphones_input_bg"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:textColor="@color/clawphones_on_background"
+        android:textColorHint="@color/clawphones_secondary_text"
+        android:singleLine="true" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/login_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:text="Login"
+            android:textAllCaps="false"
+            android:background="@drawable/clawphones_button_bg"
+            android:textColor="#1A1A1A"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/register_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="Register"
+            android:textAllCaps="false"
+            android:background="@drawable/clawphones_button_outline_bg"
+            android:textColor="@color/clawphones_accent" />
+    </LinearLayout>
+
+</LinearLayout>
+

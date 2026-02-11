@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/clawphones_background">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/chat_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/clawphones_background"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        app:titleTextColor="@color/clawphones_on_background"
+        app:subtitleTextColor="@color/clawphones_secondary_text" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/messages_recycler"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:clipToPadding="false"
+        android:overScrollMode="never" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:gravity="center_vertical"
+        android:background="@color/clawphones_background">
+
+        <EditText
+            android:id="@+id/message_input"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:hint="Type a message…"
+            android:textColor="@color/clawphones_on_background"
+            android:textColorHint="@color/clawphones_secondary_text"
+            android:background="@drawable/clawphones_input_bg"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:maxLines="4" />
+
+        <ImageButton
+            android:id="@+id/message_send"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:src="@android:drawable/ic_menu_send"
+            android:contentDescription="Send"
+            android:background="@drawable/clawphones_button_outline_bg"
+            android:tint="@color/clawphones_accent"
+            android:layout_marginStart="10dp" />
+    </LinearLayout>
+
+</LinearLayout>
+

@@ -127,10 +127,67 @@ LIMITS: Dict[str, TierLimits] = {
 _CALL_LLM_BODY: ContextVar[Optional[Dict[str, Any]]] = ContextVar("_CALL_LLM_BODY", default=None)
 
 PERSONA_PROMPTS: Dict[str, str] = {
-    "assistant": "你是 ClawPhones AI 助手，由 Oyster Labs 开发。你聪明、友好、高效。",
-    "coder": "你是一个编程专家，精通各种编程语言和框架。用代码示例回答问题。",
-    "writer": "你是一个写作助手，擅长写文章、邮件、文案。文笔流畅，逻辑清晰。",
-    "translator": "你是一个翻译官，精通中英日韩多语言互译。翻译准确自然。",
+    "assistant": (
+        "你是 ClawPhones AI 助手，由 Oyster Labs 开发。\n\n"
+        "## 关于你\n"
+        "- ClawPhones 是一款 AI 智能手机助手，运行在 Oyster Labs 的 Universal Phone 和 ClawGlasses 设备上\n"
+        "- Oyster Labs 是一家 Web3 + AI 硬件公司，已售出 40,000+ 台设备，拥有 70,000+ 用户\n"
+        "- 你的底层模型根据用户套餐自动选择：Free=DeepSeek, Pro=Kimi K2.5, Max=Claude Sonnet\n\n"
+        "## 回复规则\n"
+        "- **语言自适应**：用户用中文你就用中文回复，用英文就用英文，用日文就用日文，始终匹配用户语言\n"
+        "- **简洁优先**：回复控制在 3-5 句话内，除非用户明确要求详细解释\n"
+        "- **结构化输出**：善用 Markdown 格式（加粗、列表、代码块）让信息清晰易读\n"
+        "- **有观点**：不要空泛，给出明确建议和具体答案。如果不确定就说不确定，不要编造\n"
+        "- **代码场景**：给代码时附简短注释，默认用用户提到的语言，没提到用 Python\n"
+        "- **不要过度道歉**：直接回答问题，不需要反复说'好的'、'当然可以'之类的客套话\n"
+        "- **拒绝有害内容**：不生成违法、暴力、色情、歧视性内容\n\n"
+        "## 你的能力\n"
+        "- 日常问答、知识查询、翻译、写作、编程、数学、逻辑推理\n"
+        "- 帮用户起草邮件、文案、社交媒体帖子\n"
+        "- 解释复杂概念，提供学习建议\n"
+        "- 头脑风暴、创意生成、问题分析\n\n"
+        "## 你不能做的\n"
+        "- 无法访问互联网或实时数据\n"
+        "- 无法执行代码或操作用户设备\n"
+        "- 无法访问用户的个人文件或应用数据\n"
+    ),
+    "coder": (
+        "你是 ClawPhones 编程助手，由 Oyster Labs 开发。\n\n"
+        "## 回复规则\n"
+        "- 语言自适应：匹配用户语言\n"
+        "- 代码优先：尽量用代码示例说明，附简短中文/英文注释\n"
+        "- 给出完整可运行的代码片段，不要省略关键部分\n"
+        "- 说明时间复杂度和边界情况\n"
+        "- 如果有多种方案，先给最佳实践，再提替代方案\n"
+        "- 使用 Markdown 代码块，标注语言类型\n\n"
+        "## 擅长领域\n"
+        "Python, JavaScript/TypeScript, Swift, Java/Kotlin, Rust, Go, SQL, Shell\n"
+        "Web 开发, 移动开发, 后端架构, 数据库设计, DevOps, AI/ML\n"
+    ),
+    "writer": (
+        "你是 ClawPhones 写作助手，由 Oyster Labs 开发。\n\n"
+        "## 回复规则\n"
+        "- 语言自适应：匹配用户语言\n"
+        "- 文笔流畅自然，避免机械感和 AI 味\n"
+        "- 根据场景调整风格：商务邮件正式严谨，社交媒体轻松活泼，文章有深度有观点\n"
+        "- 给出多个版本供选择（正式版 / 口语版）\n"
+        "- 善用修辞：比喻、排比、对比，让文字有感染力\n"
+        "- 注意 SEO 关键词和阅读节奏\n\n"
+        "## 擅长领域\n"
+        "商务邮件, 社交媒体文案, 产品描述, 新闻稿, 博客文章, 学术写作, 创意文案\n"
+    ),
+    "translator": (
+        "你是 ClawPhones 翻译助手，由 Oyster Labs 开发。\n\n"
+        "## 回复规则\n"
+        "- 自动检测源语言，翻译为目标语言\n"
+        "- 如果用户没指定目标语言：中文内容翻译成英文，英文内容翻译成中文\n"
+        "- 翻译准确自然，不是逐字翻译，而是意译 + 保留原文风格\n"
+        "- 专业术语附英文原文：如 '去中心化金融 (DeFi)'\n"
+        "- 长文本分段翻译，保持格式\n"
+        "- 如果原文有歧义，给出多种翻译并解释区别\n\n"
+        "## 支持语言\n"
+        "中文 (简体/繁体), English, 日本語, 한국어, Français, Deutsch, Español, Português\n"
+    ),
 }
 
 
@@ -243,13 +300,20 @@ async def _init_db() -> None:
               status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
               note TEXT,
               user_id TEXT REFERENCES users(id),
-              created_at INTEGER NOT NULL
+              created_at INTEGER NOT NULL,
+              expires_at INTEGER
             )
             """
         )
         # Migration for existing DBs: add user_id to device_tokens.
         try:
             await db.execute("ALTER TABLE device_tokens ADD COLUMN user_id TEXT REFERENCES users(id)")
+        except Exception:
+            pass
+        # Migration for existing DBs: add expires_at to device_tokens.
+        # NULL means never expires (backwards compatible).
+        try:
+            await db.execute("ALTER TABLE device_tokens ADD COLUMN expires_at INTEGER")
         except Exception:
             pass
         await db.execute(
@@ -294,27 +358,48 @@ async def _init_db() -> None:
 
 
 async def _get_token_row(token: str) -> Optional[Dict[str, Any]]:
+    now = int(time.time())
     async with aiosqlite.connect(TOKEN_DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         try:
             async with db.execute(
-                "SELECT token,tier,status,note,created_at,user_id FROM device_tokens WHERE token=?",
-                (token,),
-            ) as cur:
-                row = await cur.fetchone()
-                return dict(row) if row else None
-        except sqlite3.OperationalError:
-            # Older DB pre-migration.
-            async with db.execute(
-                "SELECT token,tier,status,note,created_at FROM device_tokens WHERE token=?",
+                "SELECT token,tier,status,note,created_at,user_id,expires_at FROM device_tokens WHERE token=?",
                 (token,),
             ) as cur:
                 row = await cur.fetchone()
                 if not row:
                     return None
                 d = dict(row)
-                d["user_id"] = None
+                exp = d.get("expires_at")
+                if isinstance(exp, int) and exp > 0 and now >= exp:
+                    return None
                 return d
+        except sqlite3.OperationalError:
+            # Older DB pre-migration.
+            # Try the latest known subsets in order (some DBs may have user_id but not expires_at).
+            try:
+                async with db.execute(
+                    "SELECT token,tier,status,note,created_at,user_id FROM device_tokens WHERE token=?",
+                    (token,),
+                ) as cur:
+                    row = await cur.fetchone()
+                    if not row:
+                        return None
+                    d = dict(row)
+                    d["expires_at"] = None
+                    return d
+            except sqlite3.OperationalError:
+                async with db.execute(
+                    "SELECT token,tier,status,note,created_at FROM device_tokens WHERE token=?",
+                    (token,),
+                ) as cur:
+                    row = await cur.fetchone()
+                    if not row:
+                        return None
+                    d = dict(row)
+                    d["user_id"] = None
+                    d["expires_at"] = None
+                    return d
 
 
 async def _get_user_row_by_id(user_id: str) -> Optional[Dict[str, Any]]:
@@ -371,16 +456,13 @@ async def _get_user_row_by_email(email: str) -> Optional[Dict[str, Any]]:
 
 async def _get_user_row_for_token_optional(token: str) -> Optional[Dict[str, Any]]:
     # For chat paths: optional enrichment (backward compatible for tokens without user_id).
-    async with aiosqlite.connect(TOKEN_DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        try:
-            async with db.execute("SELECT user_id FROM device_tokens WHERE token=?", (token,)) as cur:
-                row = await cur.fetchone()
-        except sqlite3.OperationalError:
-            return None
-    if not row or not row["user_id"]:
+    row = await _get_token_row(token)
+    if not row:
         return None
-    return await _get_user_row_by_id(str(row["user_id"]))
+    user_id = row.get("user_id")
+    if not user_id:
+        return None
+    return await _get_user_row_by_id(str(user_id))
 
 
 async def _require_user(request: Request) -> Tuple[str, Dict[str, Any]]:
@@ -389,15 +471,30 @@ async def _require_user(request: Request) -> Tuple[str, Dict[str, Any]]:
         db.row_factory = aiosqlite.Row
         try:
             async with db.execute(
-                "SELECT token,tier,status,user_id FROM device_tokens WHERE token=?",
+                "SELECT token,tier,status,user_id,expires_at FROM device_tokens WHERE token=?",
                 (token,),
             ) as cur:
                 trow = await cur.fetchone()
         except sqlite3.OperationalError:
-            trow = None
+            # Older DB pre-migration.
+            try:
+                async with db.execute(
+                    "SELECT token,tier,status,user_id FROM device_tokens WHERE token=?",
+                    (token,),
+                ) as cur:
+                    trow = await cur.fetchone()
+            except sqlite3.OperationalError:
+                trow = None
 
     if not trow:
         raise HTTPException(status_code=401, detail="invalid token")
+    exp: Any = None
+    try:
+        exp = trow["expires_at"]
+    except Exception:
+        exp = None
+    if isinstance(exp, int) and exp > 0 and int(time.time()) >= exp:
+        raise HTTPException(status_code=401, detail="token expired")
     if (trow["status"] or "") != "active":
         raise HTTPException(status_code=403, detail="token disabled")
     user_id = trow["user_id"]
@@ -726,6 +823,7 @@ async def auth_register(request: Request) -> Any:
     if len(password) < 8 or len(password) > 72:
         raise HTTPException(status_code=400, detail="Password must be 8-72 characters")
     now = int(time.time())
+    expires_at = now + 30 * 86400
     user_id = str(uuid.uuid4())
 
     pw_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -751,8 +849,8 @@ async def auth_register(request: Request) -> Any:
             candidate = _gen_device_token()
             try:
                 await db.execute(
-                    "INSERT INTO device_tokens(token,tier,status,note,user_id,created_at) VALUES (?,?,?,?,?,?)",
-                    (candidate, tier, "active", None, user_id, now),
+                    "INSERT INTO device_tokens(token,tier,status,note,user_id,created_at,expires_at) VALUES (?,?,?,?,?,?,?)",
+                    (candidate, tier, "active", None, user_id, now, expires_at),
                 )
                 token = candidate
                 break
@@ -785,6 +883,7 @@ async def auth_login(request: Request) -> Any:
 
     ip = _client_ip(request)
     now = int(time.time())
+    expires_at = now + 30 * 86400
     if _is_login_rate_limited(ip, now):
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again in 5 minutes")
 
@@ -820,8 +919,8 @@ async def auth_login(request: Request) -> Any:
             candidate = _gen_device_token()
             try:
                 await db.execute(
-                    "INSERT INTO device_tokens(token,tier,status,note,user_id,created_at) VALUES (?,?,?,?,?,?)",
-                    (candidate, tier, "active", None, user_id, now),
+                    "INSERT INTO device_tokens(token,tier,status,note,user_id,created_at,expires_at) VALUES (?,?,?,?,?,?,?)",
+                    (candidate, tier, "active", None, user_id, now, expires_at),
                 )
                 token = candidate
                 break

@@ -8,6 +8,9 @@
     <color name="clawphones_accent">#E8A853</color>
     <color name="clawphones_accent_dark">#C08A3A</color>
 
+    <!-- AI Chat -->
+    <color name="ai_chat_user_bubble">#2F80ED</color>
+
     <!-- Status colors -->
     <color name="status_connected">#4CAF50</color>
     <color name="status_disconnected">#9E9E9E</color>

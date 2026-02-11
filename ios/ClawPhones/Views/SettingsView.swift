@@ -187,10 +187,10 @@ struct SettingsView: View {
                             .textInputAutocapitalization(.never)
                     }
                     Section("新密码") {
-                        SecureField("新密码 (至少 6 位)", text: $newPassword)
+                        SecureField("新密码 (至少 8 位)", text: $newPassword)
                             .textInputAutocapitalization(.never)
-                        if !newPassword.isEmpty && newPassword.count < 6 {
-                            Text("密码至少 6 位")
+                        if !newPassword.isEmpty && newPassword.count < 8 {
+                            Text("密码至少 8 位")
                                 .font(.footnote)
                                 .foregroundStyle(.red)
                         }
@@ -204,11 +204,23 @@ struct SettingsView: View {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button("保存") {
                             Task {
-                                await viewModel.updatePassword(old: oldPassword, new: newPassword)
-                                showChangePassword = false
+                                await viewModel.changePassword(oldPassword: oldPassword, newPassword: newPassword)
                             }
                         }
-                        .disabled(oldPassword.isEmpty || newPassword.count < 6)
+                        .disabled(viewModel.isLoading || oldPassword.isEmpty || newPassword.count < 8)
+                    }
+                }
+                .alert("Password changed", isPresented: Binding(
+                    get: { viewModel.passwordChangeSucceeded },
+                    set: { newValue in
+                        if !newValue {
+                            viewModel.passwordChangeSucceeded = false
+                        }
+                    }
+                )) {
+                    Button("OK", role: .cancel) {
+                        viewModel.passwordChangeSucceeded = false
+                        showChangePassword = false
                     }
                 }
             }

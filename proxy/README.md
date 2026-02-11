@@ -47,6 +47,7 @@ Optional:
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
+# Auth endpoints (/v1/auth/*) use bcrypt for password hashing (included in requirements.txt).
 
 export DEEPSEEK_API_KEY=...
 export KIMI_API_KEY=...

@@ -47,6 +47,7 @@
         android:extractNativeLibs="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/application_name"
+        android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
@@ -111,6 +112,16 @@
 
         <activity
             android:name="ai.clawphones.agent.ChatActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.LoginActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.ChatActivity"
             android:exported="false"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 

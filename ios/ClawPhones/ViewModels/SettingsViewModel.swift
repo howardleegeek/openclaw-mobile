@@ -6,6 +6,7 @@
 import SwiftUI
 
 extension Notification.Name {
+    static let clawPhonesAuthDidChange = Notification.Name("ai.clawphones.auth.did_change")
     static let clawPhonesConversationsDidChange = Notification.Name("ai.clawphones.conversations.did_change")
 }
 
@@ -93,6 +94,7 @@ final class SettingsViewModel: ObservableObject {
 
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var passwordChangeSucceeded: Bool = false
 
     func loadProfile() async {
         errorMessage = nil
@@ -157,12 +159,18 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func updatePassword(old: String, new: String) async {
+        await changePassword(oldPassword: old, newPassword: new)
+    }
+
+    func changePassword(oldPassword: String, newPassword: String) async {
         errorMessage = nil
+        passwordChangeSucceeded = false
         isLoading = true
         defer { isLoading = false }
 
         do {
-            _ = try await OpenClawAPI.shared.updatePassword(oldPassword: old, newPassword: new)
+            _ = try await OpenClawAPI.shared.updatePassword(oldPassword: oldPassword, newPassword: newPassword)
+            passwordChangeSucceeded = true
         } catch {
             // TODO: backend may not be ready yet.
             errorMessage = error.localizedDescription
@@ -280,5 +288,7 @@ final class SettingsViewModel: ObservableObject {
         UserDefaults.standard.removeObject(forKey: DeviceConfig.managedDeviceTokenKey)
         UserDefaults.standard.removeObject(forKey: DeviceConfig.managedBaseURLKey)
         UserDefaults.standard.removeObject(forKey: DeviceConfig.managedModeKey)
+
+        NotificationCenter.default.post(name: .clawPhonesAuthDidChange, object: nil)
     }
 }

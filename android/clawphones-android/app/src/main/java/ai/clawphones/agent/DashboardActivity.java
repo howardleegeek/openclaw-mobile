@@ -26,6 +26,8 @@ import com.termux.app.TermuxActivity;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 
+import ai.clawphones.agent.chat.ClawPhonesAPI;
+
 import org.json.JSONObject;
 
 import java.net.Inet4Address;
@@ -103,12 +105,14 @@ public class DashboardActivity extends Activity {
         mStopButton = findViewById(R.id.btn_stop);
         mRestartButton = findViewById(R.id.btn_restart);
         Button openTerminalButton = findViewById(R.id.btn_open_terminal);
+        Button openAiChatButton = findViewById(R.id.btn_ai_chat);
 
         // Setup button listeners
         mStartButton.setOnClickListener(v -> startGateway());
         mStopButton.setOnClickListener(v -> stopGateway());
         mRestartButton.setOnClickListener(v -> restartGateway());
         openTerminalButton.setOnClickListener(v -> openTerminal());
+        openAiChatButton.setOnClickListener(v -> openAiChat());
 
         mSshCard = findViewById(R.id.ssh_card);
         mSshInfoText = findViewById(R.id.ssh_info_text);
@@ -135,6 +139,14 @@ public class DashboardActivity extends Activity {
         if (stored != null) {
             showUpdateBanner(stored[0], stored[1]);
         }
+    }
+
+    private void openAiChat() {
+        String token = ClawPhonesAPI.getToken(this);
+        Class<?> target = (token != null && !token.trim().isEmpty())
+            ? ai.clawphones.agent.chat.ChatActivity.class
+            : ai.clawphones.agent.chat.LoginActivity.class;
+        startActivity(new Intent(this, target));
     }
 
     @Override
