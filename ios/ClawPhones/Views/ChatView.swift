@@ -67,6 +67,7 @@ struct ChatView: View {
             ChatInputBar(text: $inputText, isLoading: viewModel.isLoading) {
                 let textToSend = inputText
                 inputText = ""
+                CrashReporter.shared.setLastAction("sending_message")
                 Task {
                     await viewModel.sendMessage(text: textToSend)
                 }

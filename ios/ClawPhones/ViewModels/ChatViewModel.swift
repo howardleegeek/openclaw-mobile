@@ -141,6 +141,7 @@ final class ChatViewModel: ObservableObject {
                 return
             }
         } catch {
+            CrashReporter.shared.reportNonFatal(error: error, action: "streaming_chat")
             if didReceiveAnyChunk {
                 errorMessage = error.localizedDescription
                 return

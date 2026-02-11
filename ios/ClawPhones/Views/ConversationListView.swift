@@ -72,7 +72,7 @@ struct ConversationListView: View {
         }
         .task(id: auth.isAuthenticated) {
             if auth.isAuthenticated {
-                await viewModel.loadConversations()
+                await loadConversationsWithTracking()
             } else {
                 viewModel.conversations = []
                 viewModel.errorMessage = nil
@@ -80,14 +80,14 @@ struct ConversationListView: View {
         }
         .refreshable {
             if auth.isAuthenticated {
-                await viewModel.loadConversations()
+                await loadConversationsWithTracking()
                 let generator = UIImpactFeedbackGenerator(style: .light)
                 generator.impactOccurred()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .clawPhonesConversationsDidChange)) { _ in
             guard auth.isAuthenticated else { return }
-            Task { await viewModel.loadConversations() }
+            Task { await loadConversationsWithTracking() }
         }
         .overlay {
             if viewModel.isLoading && viewModel.conversations.isEmpty {
@@ -154,5 +154,10 @@ struct ConversationListView: View {
         }
 
         return Self.monthDayFormatter.string(from: date)
+    }
+
+    private func loadConversationsWithTracking() async {
+        CrashReporter.shared.setLastAction("loading_conversations")
+        await viewModel.loadConversations()
     }
 }

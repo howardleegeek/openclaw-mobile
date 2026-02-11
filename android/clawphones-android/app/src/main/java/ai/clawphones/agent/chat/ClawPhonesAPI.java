@@ -224,6 +224,16 @@ public class ClawPhonesAPI {
         return extractAssistantContent(resp);
     }
 
+    /** POST /v1/crash-reports -> 2xx */
+    public static void postCrashReport(String token, String jsonBody)
+        throws IOException, ApiException {
+        String body = jsonBody;
+        if (body == null || body.trim().isEmpty()) {
+            body = "{}";
+        }
+        doPostRaw(BASE_URL + "/v1/crash-reports", body, token);
+    }
+
     /**
      * POST /v1/conversations/{id}/chat/stream -> SSE streaming response.
      * Must be called from a background thread. Callbacks fire on the calling thread.
@@ -328,6 +338,27 @@ public class ClawPhonesAPI {
             os.write(body.toString().getBytes(StandardCharsets.UTF_8));
         }
         return readResponse(conn);
+    }
+
+    private static void doPostRaw(String urlStr, String rawBody, String token) throws IOException, ApiException {
+        HttpURLConnection conn = openConnection(urlStr, "POST", token);
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(rawBody.getBytes(StandardCharsets.UTF_8));
+        }
+
+        int code = conn.getResponseCode();
+        String raw;
+        try {
+            raw = readBody(conn, code);
+        } finally {
+            conn.disconnect();
+        }
+        if (code < 200 || code >= 300) {
+            Logger.logError(LOG_TAG, "API error " + code + ": " + raw);
+            throw new ApiException(code, raw.isEmpty() ? "HTTP " + code : raw);
+        }
     }
 
     private static void doDeleteNoContent(String urlStr, String token) throws IOException, ApiException {

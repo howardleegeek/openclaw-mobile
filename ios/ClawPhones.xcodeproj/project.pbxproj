@@ -13,6 +13,7 @@
 		449C4D244B7A1C00D4AD632E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 30145ADC199352484415BA60 /* PrivacyInfo.xcprivacy */; };
 		4BBB5AC4A4384E83B3CB3E99 /* StreamChunk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEB09C2D39E49319063F40F /* StreamChunk.swift */; };
 		53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */; };
+		D5A2F823B2D34E6C9EAB1C2D /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */; };
 		6308C676767303AC938FD129 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4B6AD8A22BC95F89042271 /* ChatViewModel.swift */; };
 		6B1685B1F341B6314DDB77A5 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AC5AE07859E9065699CB5FE /* ConversationListView.swift */; };
 		7B5A22A66466928C9A83C19F /* ClawPhonesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA521445573D71EA58448AA /* ClawPhonesApp.swift */; };
@@ -43,6 +44,7 @@
 		575C0A74873CA4D4C6F87F30 /* MessageRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRow.swift; sourceTree = "<group>"; };
 		5B9BE935A3A036729805815B /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenClawAPI.swift; sourceTree = "<group>"; };
+		C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporter.swift; sourceTree = "<group>"; };
 		7BEB09C2D39E49319063F40F /* StreamChunk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamChunk.swift; sourceTree = "<group>"; };
 		8BF3986839DCF6C9FD74576D /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
 		97D8E07F8EC6E306984E5477 /* ClawPhones.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawPhones.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -130,6 +132,7 @@
 				E7EB7A9F06A699DF506EF17C /* DeviceConfig.swift */,
 				F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */,
 				5EAD2F1A17C0F9C1A142B457 /* OpenClawAPI.swift */,
+				C4F1E712A1C24F5B8D9A0B1C /* CrashReporter.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -258,6 +261,7 @@
 					53E6CFE2A6FB59CB700453BB /* KeychainHelper.swift in Sources */,
 					7B76B91766B66B84EF03BA9A /* DeviceConfig.swift in Sources */,
 					A9B02360260017A42DC8546F /* OpenClawAPI.swift in Sources */,
+					D5A2F823B2D34E6C9EAB1C2D /* CrashReporter.swift in Sources */,
 				);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

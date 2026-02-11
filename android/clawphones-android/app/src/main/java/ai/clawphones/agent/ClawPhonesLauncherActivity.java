@@ -55,6 +55,7 @@ public class ClawPhonesLauncherActivity extends Activity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        CrashReporter.init(getApplicationContext());
 
         // Fast path: go directly to AI Chat. No permissions or OpenClaw install needed.
         // End users just want to chat — skip the entire setup flow.

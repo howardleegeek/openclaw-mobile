@@ -14,6 +14,10 @@ final class OpenClawAPI {
     private var baseURLString: String {
         DeviceConfig.shared.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
+    
+    var baseURL: String {
+        baseURLString
+    }
 
     // MARK: - Auth + User Models (backend sync in progress)
 
@@ -458,6 +462,17 @@ final class OpenClawAPI {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
+            if httpResponse.statusCode >= 500 {
+                CrashReporter.shared.reportNonFatal(
+                    error: NSError(
+                        domain: "API",
+                        code: httpResponse.statusCode,
+                        userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]
+                    ),
+                    action: "api_call"
+                )
+            }
+
             if httpResponse.statusCode == 401 {
                 // Auto-clear invalid token
                 DeviceConfig.shared.clearTokens()

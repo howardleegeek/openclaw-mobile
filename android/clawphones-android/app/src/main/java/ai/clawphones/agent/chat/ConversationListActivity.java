@@ -17,11 +17,10 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
-import android.widget.ImageButton;
 import com.termux.R;
 
 import org.json.JSONException;
@@ -84,7 +83,7 @@ public class ConversationListActivity extends AppCompatActivity {
 
         attachSwipeToDelete();
 
-        ImageButton fab = findViewById(R.id.new_conversation_fab);
+        FloatingActionButton fab = findViewById(R.id.new_conversation_fab);
         if (fab != null) {
             fab.setOnClickListener(v -> {
                 Intent i = new Intent(ConversationListActivity.this, ChatActivity.class);
