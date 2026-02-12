@@ -104,8 +104,9 @@
 
         <!-- ClawPhones GUI Components -->
         <activity
-            android:name="ai.clawphones.agent.ClawPhonesLauncherActivity"
+            android:name="ai.clawphones.agent.chat.MainHubActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -113,6 +114,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name="ai.clawphones.agent.ClawPhonesLauncherActivity"
+            android:exported="true"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 
         <activity
             android:name="ai.clawphones.agent.OnboardingActivity"
@@ -252,6 +258,18 @@
         <activity
             android:name="ai.clawphones.agent.chat.PluginMarketActivity"
             android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.ExploreActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
+            android:name="ai.clawphones.agent.chat.ProfileActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <service

@@ -1,4 +1,4 @@
-package com.openclaw.chat;
+package ai.clawphones.agent.chat;
 
 import android.content.Context;
 import android.content.SharedPreferences;

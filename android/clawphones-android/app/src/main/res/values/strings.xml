@@ -871,4 +871,51 @@
     <string name="plugin_installed">%s 已安装 / %s installed</string>
     <string name="plugin_uninstalled">%s 已卸载 / %s uninstalled</string>
 
+    <!-- Main Hub Navigation -->
+    <string name="nav_chat">聊天 / Chat</string>
+    <string name="nav_community">社区 / Community</string>
+    <string name="nav_community_with_badge">社区 (%d) / Community</string>
+    <string name="nav_tasks">任务 / Tasks</string>
+    <string name="nav_explore">探索 / Explore</string>
+    <string name="nav_profile">我的 / Profile</string>
+
+    <!-- Explore -->
+    <string name="explore_title">探索 / Explore</string>
+    <string name="explore_icon_desc">探索图标 / Explore icon</string>
+    <string name="explore_node_mode">节点模式 / Node Mode</string>
+    <string name="explore_node_mode_subtitle">启用摄像监控 / Enable camera monitoring</string>
+    <string name="explore_edge_compute">边缘计算 / Edge Compute</string>
+    <string name="explore_edge_compute_subtitle">本地AI处理 / Local AI processing</string>
+    <string name="explore_coverage_map">覆盖热力图 / Coverage Map</string>
+    <string name="explore_coverage_map_subtitle">查看节点分布 / View node distribution</string>
+    <string name="explore_developer_portal">开发者门户 / Developer Portal</string>
+    <string name="explore_developer_portal_subtitle">API密钥和Webhook / API keys and webhooks</string>
+    <string name="explore_usage_dashboard">使用仪表盘 / Usage Dashboard</string>
+    <string name="explore_usage_dashboard_subtitle">API请求统计 / API request stats</string>
+    <string name="explore_plugin_market">插件市场 / Plugin Market</string>
+    <string name="explore_plugin_market_subtitle">浏览和安装插件 / Browse and install plugins</string>
+    <string name="explore_performance_dashboard">性能监控 / Performance Dashboard</string>
+    <string name="explore_performance_dashboard_subtitle">系统健康监控 / System health monitoring</string>
+
+    <!-- Profile -->
+    <string name="profile_title">我的 / Profile</string>
+    <string name="profile_avatar_desc">用户头像 / User avatar</string>
+    <string name="profile_user_name_placeholder">用户名 / Username</string>
+    <string name="profile_user_email_placeholder">user@example.com</string>
+    <string name="profile_section_financial">钱包与代币 / Wallet &amp; Tokens</string>
+    <string name="profile_section_data">数据与排行 / Data &amp; Stats</string>
+    <string name="profile_section_settings">设置 / Settings</string>
+    <string name="profile_wallet">钱包 &amp; 代币 / Wallet &amp; Tokens</string>
+    <string name="profile_rewards">每日奖励 / Daily Rewards</string>
+    <string name="profile_leaderboard">排行榜 / Leaderboard</string>
+    <string name="profile_earnings">收益明细 / Earnings</string>
+    <string name="profile_language">语言设置 / Language</string>
+    <string name="profile_language_chinese">中文</string>
+    <string name="profile_language_english">English</string>
+    <string name="profile_language_saved">语言已设置为 %1$s / Language set to %1$s</string>
+    <string name="profile_privacy_center">隐私中心 / Privacy Center</string>
+    <string name="profile_performance_monitor">性能监控 / Performance Monitor</string>
+    <string name="profile_logout">退出登录 / Logout</string>
+    <string name="profile_logout_confirm">确定退出登录吗？ / Are you sure you want to logout?</string>
+
 </resources>

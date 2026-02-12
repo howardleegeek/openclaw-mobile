@@ -111,6 +111,25 @@ struct SettingsView: View {
                 }
             }
 
+            Section("功能") {
+                NavigationLink { WalletView() } label: { Label("钱包 & 代币", systemImage: "creditcard.fill") }
+                NavigationLink { RewardsView() } label: { Label("每日奖励", systemImage: "gift.fill") }
+                NavigationLink { LeaderboardView() } label: { Label("排行榜", systemImage: "trophy.fill") }
+                NavigationLink { EarningsView() } label: { Label("收益明细", systemImage: "chart.bar.fill") }
+            }
+
+            Section("开发者") {
+                NavigationLink { DeveloperPortalView() } label: { Label("API & 插件", systemImage: "wrench.and.screwdriver.fill") }
+                NavigationLink { UsageDashboardView() } label: { Label("使用统计", systemImage: "chart.xyaxis.line") }
+                NavigationLink { PluginMarketView() } label: { Label("插件市场", systemImage: "puzzlepiece.extension.fill") }
+            }
+
+            Section("隐私 & 性能") {
+                NavigationLink { PrivacyCenterView() } label: { Label("隐私中心", systemImage: "hand.raised.fill") }
+                NavigationLink { AuditLogView() } label: { Label("审计日志", systemImage: "doc.text.magnifyingglass") }
+                NavigationLink { PerformanceDashboardView() } label: { Label("性能监控", systemImage: "gauge.with.dots.needle.33percent") }
+            }
+
             Section("语言") {
                 Picker("语言", selection: languageBinding) {
                     ForEach(SettingsViewModel.Language.allCases) { lang in

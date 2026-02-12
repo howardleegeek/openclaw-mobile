@@ -14,10 +14,10 @@ struct ContentView: View {
 
     private enum Tab: Hashable {
         case chat
-        case edge
         case community
         case tasks
-        case settings
+        case explore
+        case profile
     }
 
     @State private var selectedTab: Tab = .chat
@@ -34,17 +34,9 @@ struct ContentView: View {
                 ConversationListView(pendingSharedPayloadID: $pendingSharedPayloadID)
             }
             .tabItem {
-                Label("聊天", systemImage: "message")
+                Label("聊天", systemImage: "message.fill")
             }
             .tag(Tab.chat)
-
-            NavigationStack {
-                EdgeComputeView()
-            }
-            .tabItem {
-                Label("算力", systemImage: "cpu.fill")
-            }
-            .tag(Tab.edge)
 
             NavigationStack {
                 CommunityListView()
@@ -58,17 +50,25 @@ struct ContentView: View {
                 TaskListView()
             }
             .tabItem {
-                Label("任务", systemImage: "dollarsign.circle.fill")
+                Label("任务", systemImage: "briefcase.fill")
             }
             .tag(Tab.tasks)
+
+            NavigationStack {
+                ExploreView()
+            }
+            .tabItem {
+                Label("探索", systemImage: "safari.fill")
+            }
+            .tag(Tab.explore)
 
             NavigationStack {
                 SettingsView()
             }
             .tabItem {
-                Label("设置", systemImage: "gearshape")
+                Label("我的", systemImage: "person.crop.circle")
             }
-            .tag(Tab.settings)
+            .tag(Tab.profile)
         }
         .environmentObject(auth)
         .fullScreenCover(isPresented: Binding(
