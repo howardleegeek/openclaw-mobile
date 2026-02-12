@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 /// Type of compute job that can be executed on the edge node
 enum JobType: String, Codable, CaseIterable {
@@ -175,7 +176,7 @@ struct ComputeResult: Codable {
         case jobId = "job_id"
         case success
         case resultData = "result_data"
-        let confidence
+        case confidence
         case structuredOutput = "structured_output"
         case errorMessage = "error_message"
         case executionTimeSec = "execution_time_sec"
@@ -293,7 +294,7 @@ struct EdgeNodeCapabilities: Codable {
         case deviceModel = "device_model"
         case osVersion = "os_version"
         case supportedFrameworks = "supported_frameworks"
-        let supportedJobTypes = "supported_job_types"
+        case supportedJobTypes = "supported_job_types"
         case totalMemoryMB = "total_memory_mb"
         case cpuCores = "cpu_cores"
         case hasNeuralEngine = "has_neural_engine"
@@ -335,6 +336,57 @@ struct EdgeNodeCapabilities: Codable {
         self.avgCompletionTime = avgCompletionTime
         self.isAvailable = isAvailable
         self.lastHeartbeat = lastHeartbeat
+    }
+
+    // Custom Codable implementation to handle [JobType: Double] dictionary
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        deviceId = try container.decode(String.self, forKey: .deviceId)
+        deviceModel = try container.decode(String.self, forKey: .deviceModel)
+        osVersion = try container.decode(String.self, forKey: .osVersion)
+        supportedFrameworks = try container.decode([String].self, forKey: .supportedFrameworks)
+        supportedJobTypes = try container.decode([JobType].self, forKey: .supportedJobTypes)
+        totalMemoryMB = try container.decode(Int.self, forKey: .totalMemoryMB)
+        cpuCores = try container.decode(Int.self, forKey: .cpuCores)
+        hasNeuralEngine = try container.decode(Bool.self, forKey: .hasNeuralEngine)
+        hasGPUSupport = try container.decode(Bool.self, forKey: .hasGPUSupport)
+        preferredJobTypes = try container.decode([JobType].self, forKey: .preferredJobTypes)
+        maxConcurrentJobs = try container.decode(Int.self, forKey: .maxConcurrentJobs)
+        isAvailable = try container.decode(Bool.self, forKey: .isAvailable)
+        lastHeartbeat = try container.decodeIfPresent(Date.self, forKey: .lastHeartbeat)
+
+        // Decode avgCompletionTime as [String: Double] then convert to [JobType: Double]
+        let avgCompletionTimeStrings = try container.decode([String: Double].self, forKey: .avgCompletionTime)
+        var tempDict: [JobType: Double] = [:]
+        for (key, value) in avgCompletionTimeStrings {
+            if let jobType = JobType(rawValue: key) {
+                tempDict[jobType] = value
+            }
+        }
+        avgCompletionTime = tempDict
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(deviceId, forKey: .deviceId)
+        try container.encode(deviceModel, forKey: .deviceModel)
+        try container.encode(osVersion, forKey: .osVersion)
+        try container.encode(supportedFrameworks, forKey: .supportedFrameworks)
+        try container.encode(supportedJobTypes, forKey: .supportedJobTypes)
+        try container.encode(totalMemoryMB, forKey: .totalMemoryMB)
+        try container.encode(cpuCores, forKey: .cpuCores)
+        try container.encode(hasNeuralEngine, forKey: .hasNeuralEngine)
+        try container.encode(hasGPUSupport, forKey: .hasGPUSupport)
+        try container.encode(preferredJobTypes, forKey: .preferredJobTypes)
+        try container.encode(maxConcurrentJobs, forKey: .maxConcurrentJobs)
+        try container.encode(isAvailable, forKey: .isAvailable)
+        try container.encodeIfPresent(lastHeartbeat, forKey: .lastHeartbeat)
+
+        // Encode avgCompletionTime by converting [JobType: Double] to [String: Double]
+        let avgCompletionTimeStrings = avgCompletionTime.reduce(into: [:]) { result, pair in
+            result[pair.key.rawValue] = pair.value
+        }
+        try container.encode(avgCompletionTimeStrings, forKey: .avgCompletionTime)
     }
 
     /// Generate capabilities for the current device

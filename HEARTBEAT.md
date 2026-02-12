@@ -3,7 +3,7 @@
 每 30 分钟轮询一次，按顺序检查：
 
 ## 1. 系统健康
-- curl localhost:8080/health (OpenClaw Proxy)
+- curl localhost:18789/health (Gateway)  ← Updated: Gateway runs on 18789
 - curl localhost:8787 (Oysterworld Relay)
 - curl localhost:3456 (Dashboard)
 - 有任何服务挂了 → 立即通知 Howard

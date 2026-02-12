@@ -243,6 +243,13 @@ class EdgeComputeService: ObservableObject {
         currentJobCount += 1
         currentJob = job
         isProcessing = true
+        defer {
+            currentJobCount -= 1
+            isProcessing = currentJobCount > 0
+            if !isProcessing {
+                currentJob = nil
+            }
+        }
 
         let startTime = Date()
 
@@ -297,12 +304,6 @@ class EdgeComputeService: ObservableObject {
                 timestamp: Date()
             )
 
-        } finally {
-            currentJobCount -= 1
-            isProcessing = currentJobCount > 0
-            if !isProcessing {
-                currentJob = nil
-            }
         }
     }
 

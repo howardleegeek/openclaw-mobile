@@ -584,7 +584,7 @@ class TaskMarketService: ObservableObject {
             // Monitoring task execution
             taskData["monitoring_duration"] = task.requirements.durationMinutes
             taskData["readings"] = [
-                "signal_strength": Int.random(in: -80...-40),
+                "signal_strength": Int.random(in: -80 ... -40),
                 "network_type": "5G",
                 "ping_ms": Int.random(in: 10...100)
             ]

@@ -9,7 +9,7 @@ struct DeveloperPortalView: View {
     @State private var selectedTab = 0
     @State private var apiKeys: [APIKey] = []
     @State private var webhooks: [Webhook] = []
-    @State private var usageStats: UsageStats?
+    @State private var usageStats: DeveloperPortalUsageStats?
     @State private var isLoading = true
     @State private var showGenerateKeySheet = false
     @State private var showAddWebhookSheet = false
@@ -407,7 +407,7 @@ struct DeveloperPortalView: View {
         return []
     }
 
-    private func loadUsage() async -> UsageStats? {
+    private func loadUsage() async -> DeveloperPortalUsageStats? {
         // TODO: Implement API call
         return nil
     }
@@ -626,16 +626,7 @@ private struct AddWebhookSheet: View {
 }
 
 // MARK: - Models
-
-struct APIKey: Identifiable, Codable {
-    let id: String
-    let name: String
-    let key: String
-    let permissions: [String]
-    let createdAt: Date
-    var lastUsedAt: Date?
-    var expiresAt: Date?
-}
+// APIKey is defined in Models/DeveloperSDK.swift
 
 struct Webhook: Identifiable, Codable {
     let id: String
@@ -646,7 +637,8 @@ struct Webhook: Identifiable, Codable {
     var lastTriggered: Date?
 }
 
-struct UsageStats: Codable {
+// DeveloperPortalUsageStats for DeveloperPortal (local to this view)
+struct DeveloperPortalUsageStats: Codable {
     let totalCalls: Int
     let monthlyCalls: Int
     let currentCalls: Int

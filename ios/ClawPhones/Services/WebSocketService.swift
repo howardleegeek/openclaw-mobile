@@ -72,7 +72,7 @@ final class WebSocketService: ObservableObject {
 
     private var pingTimer: Timer?
     private var reconnectTimer: Timer?
-    private var currentBackoff: TimeInterval = Self.initialBackoff
+    private var currentBackoff: TimeInterval = 1 // Same as initialBackoff
     private var shouldReconnect: Bool = true
 
     private let stateQueue = DispatchQueue(label: "ai.clawphones.websocket.state")
@@ -88,7 +88,9 @@ final class WebSocketService: ObservableObject {
     }
 
     deinit {
-        disconnect()
+        Task { @MainActor in
+            self.disconnect()
+        }
     }
 
     // MARK: - Public Methods
@@ -98,14 +100,14 @@ final class WebSocketService: ObservableObject {
     ///   - url: WebSocket URL (ws:// or wss://)
     ///   - token: Optional bearer token for authentication
     /// - Throws: WebSocketError if URL is invalid
-    func connect(to url: String, token: String? = nil) throws {
+    func connect(to url: String, token: String? = nil) async throws {
         guard let websocketURL = URL(string: url),
               websocketURL.scheme == "ws" || websocketURL.scheme == "wss" else {
             throw WebSocketError.invalidURL(url)
         }
 
         // Disconnect existing connection if any
-        disconnect()
+        await disconnect()
 
         self.url = websocketURL
         self.token = token
@@ -136,7 +138,7 @@ final class WebSocketService: ObservableObject {
     ///   - data: Message data to send
     /// - Throws: WebSocketError if not connected or send fails
     func sendMessage(_ data: Data) throws {
-        send(.data(data))
+        try send(.data(data))
     }
 
     /// Send a text message through WebSocket
@@ -144,7 +146,7 @@ final class WebSocketService: ObservableObject {
     ///   - text: Text message to send
     /// - Throws: WebSocketError if not connected or send fails
     func sendMessage(_ text: String) throws {
-        send(.text(text))
+        try send(.text(text))
     }
 
     /// Set event handlers for WebSocket events
@@ -257,14 +259,14 @@ final class WebSocketService: ObservableObject {
                     self?.eventHandlers.onFailure?(WebSocketError.sendFailed(error))
                 }
                 if !isConnected {
-                    self?.scheduleReconnect()
+                    scheduleReconnect()
                 }
             }
 
             // Continue flushing if more messages
             messageQueueQueue.async { [weak self] in
-                guard !self.messageQueue.isEmpty else { return }
-                self?.flushMessageQueue()
+                guard let self = self, !self.messageQueue.isEmpty else { return }
+                self.flushMessageQueue()
             }
         }
     }
@@ -332,7 +334,11 @@ final class WebSocketService: ObservableObject {
 
             Task {
                 do {
-                    try await task.sendPing()
+                    try await task.sendPing { error in
+                        if let error = error {
+                            print("Ping failed: \(error.localizedDescription)")
+                        }
+                    }
                 } catch {
                     Task { @MainActor [weak self] in
                         self?.isConnected = false

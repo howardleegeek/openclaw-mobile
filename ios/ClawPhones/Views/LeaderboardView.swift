@@ -494,7 +494,7 @@ struct LeaderboardUser: Identifiable, Codable {
     let score: Int
     let rank: Int
     let scoreChange: Int
-    let badge: Badge?
+    let badge: RewardBadge?
     let completedTasks: Int
 
     enum CodingKeys: String, CodingKey {
@@ -510,24 +510,7 @@ struct LeaderboardUser: Identifiable, Codable {
 }
 
 // MARK: - Leaderboard
-
-struct Leaderboard: Codable {
-    let users: [LeaderboardUser]
-    let topUsers: [LeaderboardUser]
-    let timePeriod: LeaderboardTimePeriod
-    let lastUpdated: Date?
-
-    var userCount: Int {
-        users.count
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case users
-        case topUsers = "top_users"
-        case timePeriod = "time_period"
-        case lastUpdated = "last_updated"
-    }
-}
+// Leaderboard is defined in Models/TokenEconomy.swift
 
 // MARK: - Leaderboard View Model
 

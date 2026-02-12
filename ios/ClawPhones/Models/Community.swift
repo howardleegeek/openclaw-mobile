@@ -29,7 +29,8 @@ struct Community: Codable, Identifiable {
     }
 }
 
-struct CommunityMember: Codable {
+struct CommunityMember: Codable, Identifiable {
+    var id: String { userId }
     let userId: String
     let nodeId: String
     let role: CommunityRole
@@ -40,6 +41,11 @@ struct CommunityMember: Codable {
         case nodeId = "node_id"
         case role
         case joinedAt = "joined_at"
+    }
+
+    // View compatibility
+    var name: String {
+        return "User \(userId.prefix(8))" // In a real app, this would fetch from user service
     }
 }
 
@@ -55,4 +61,12 @@ enum CommunityRole: String, Codable {
             return "Member"
         }
     }
+
+    // View compatibility - alias for 'admin' as 'owner'
+    static var owner: CommunityRole {
+        return .admin
+    }
 }
+
+// Alias for backward compatibility
+typealias MemberRole = CommunityRole

@@ -141,6 +141,43 @@ struct Transaction: Codable, Identifiable {
         formatter.timeStyle = .short
         return formatter.string(from: createdAt)
     }
+
+    // WalletView compatibility
+    var title: String {
+        return description
+    }
+
+    var note: String? {
+        return nil // Note is part of description
+    }
+
+    var date: Date {
+        return createdAt
+    }
+
+    var amountText: String {
+        return formattedAmount
+    }
+}
+
+// MARK: - TransactionType Extensions for WalletView compatibility
+import SwiftUI
+
+extension TransactionType {
+    var icon: String {
+        return iconName
+    }
+
+    var backgroundColor: Color {
+        switch self {
+        case .credit, .reward:
+            return Color.green
+        case .debit, .penalty:
+            return Color.red
+        case .transfer:
+            return Color.blue
+        }
+    }
 }
 
 // MARK: - Reward Trigger Type
@@ -258,7 +295,7 @@ enum Badge: String, Codable, CaseIterable {
 
 // MARK: - Leaderboard Entry
 struct LeaderboardEntry: Codable, Identifiable {
-    let id = UUID()
+    var id: String { userId }
     let rank: Int
     let userId: String
     let displayName: String
@@ -320,6 +357,14 @@ struct Leaderboard: Codable {
 
     var topThree: [LeaderboardEntry] {
         return Array(entries.prefix(3))
+    }
+
+    var topUsers: [LeaderboardEntry] {
+        return Array(entries.prefix(3))
+    }
+
+    var users: [LeaderboardEntry] {
+        return Array(entries.dropFirst(3))
     }
 
     var isRanked: Bool {

@@ -287,24 +287,7 @@ private struct CreateCommunitySheet: View {
 }
 
 // MARK: - Community Model
-
-struct Community: Identifiable, Codable {
-    let id: String
-    let name: String
-    let description: String?
-    let memberCount: Int
-    let createdAt: Date?
-    let isOwner: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case description
-        case memberCount = "member_count"
-        case createdAt = "created_at"
-        case isOwner = "is_owner"
-    }
-}
+// Community type is defined in Models/Community.swift
 
 // MARK: - Community Service
 
@@ -334,36 +317,7 @@ enum CommunityError: LocalizedError {
     }
 }
 
-actor CommunityService {
-    static let shared = CommunityService()
-
-    private init() {}
-
-    func fetchMyCommunities() async -> [Community] {
-        // TODO: Implement API call
-        return []
-    }
-
-    func createCommunity(name: String, description: String) async -> Result<Community, CommunityError> {
-        // TODO: Implement API call
-        return .failure(.unknown("Not implemented"))
-    }
-
-    func joinCommunity(inviteCode: String) async -> Result<Void, CommunityError> {
-        // TODO: Implement API call
-        return .failure(.unknown("Not implemented"))
-    }
-
-    func leaveCommunity(communityId: String) async -> Result<Void, CommunityError> {
-        // TODO: Implement API call
-        return .failure(.unknown("Not implemented"))
-    }
-
-    func fetchCommunityDetail(id: String) async -> CommunityDetail? {
-        // TODO: Implement API call
-        return nil
-    }
-}
+// CommunityService is defined in Services/CommunityService.swift
 
 struct CommunityDetail: Identifiable {
     let id: String
@@ -409,16 +363,4 @@ struct CommunityAlert: Identifiable, Codable {
     }
 }
 
-struct CommunityMember: Identifiable, Codable {
-    let id: String
-    let name: String
-    let email: String?
-    let role: MemberRole
-    let joinedAt: Date?
-}
-
-enum MemberRole: String, Codable {
-    case owner = "owner"
-    case admin = "admin"
-    case member = "member"
-}
+// CommunityMember is defined in Models/Community.swift

@@ -51,11 +51,10 @@ enum TokenEconomyError: Error, LocalizedError {
 }
 
 // MARK: - API Response Wrapper
-struct APIResponse<T: Codable>: Codable {
+private struct TokenEconomyAPIResponse<T: Decodable>: Decodable {
     let success: Bool
     let data: T?
     let message: String?
-    let error: String?
 }
 
 // MARK: - Token Economy Service
@@ -117,7 +116,7 @@ class TokenEconomyService: ObservableObject {
                 throw TokenEconomyError.serverError(httpResponse.statusCode)
             }
 
-            let apiResponse = try JSONDecoder().decode(APIResponse<WalletBalance>.self, from: data)
+            let apiResponse = try JSONDecoder().decode(TokenEconomyAPIResponse<WalletBalance>.self, from: data)
 
             guard let balance = apiResponse.data else {
                 throw TokenEconomyError.decodingError
@@ -200,7 +199,7 @@ class TokenEconomyService: ObservableObject {
                 throw TokenEconomyError.serverError(httpResponse.statusCode)
             }
 
-            let apiResponse = try JSONDecoder().decode(APIResponse<[Transaction]>.self, from: data)
+            let apiResponse = try JSONDecoder().decode(TokenEconomyAPIResponse<[Transaction]>.self, from: data)
 
             guard let transactions = apiResponse.data else {
                 throw TokenEconomyError.decodingError
@@ -281,7 +280,7 @@ class TokenEconomyService: ObservableObject {
 
             switch httpResponse.statusCode {
             case 200...299:
-                let apiResponse = try JSONDecoder().decode(APIResponse<TransferResponse>.self, from: data)
+                let apiResponse = try JSONDecoder().decode(TokenEconomyAPIResponse<TransferResponse>.self, from: data)
 
                 guard let transferResponse = apiResponse.data else {
                     throw TokenEconomyError.decodingError
@@ -354,7 +353,7 @@ class TokenEconomyService: ObservableObject {
 
             switch httpResponse.statusCode {
             case 200...299:
-                let apiResponse = try JSONDecoder().decode(APIResponse<ClaimRewardResponse>.self, from: data)
+                let apiResponse = try JSONDecoder().decode(TokenEconomyAPIResponse<ClaimRewardResponse>.self, from: data)
 
                 guard let claimResponse = apiResponse.data else {
                     throw TokenEconomyError.decodingError
@@ -445,7 +444,7 @@ class TokenEconomyService: ObservableObject {
                 throw TokenEconomyError.serverError(httpResponse.statusCode)
             }
 
-            let apiResponse = try JSONDecoder().decode(APIResponse<Leaderboard>.self, from: data)
+            let apiResponse = try JSONDecoder().decode(TokenEconomyAPIResponse<Leaderboard>.self, from: data)
 
             guard let leaderboard = apiResponse.data else {
                 throw TokenEconomyError.decodingError
@@ -502,7 +501,7 @@ class TokenEconomyService: ObservableObject {
                 throw TokenEconomyError.serverError(httpResponse.statusCode)
             }
 
-            let apiResponse = try JSONDecoder().decode(APIResponse<[RewardRule]>.self, from: data)
+            let apiResponse = try JSONDecoder().decode(TokenEconomyAPIResponse<[RewardRule]>.self, from: data)
 
             guard let rules = apiResponse.data else {
                 throw TokenEconomyError.decodingError
@@ -631,10 +630,4 @@ class TokenEconomyService: ObservableObject {
 }
 
 // MARK: - Auth Manager (Reference)
-// In a real implementation, this would be a separate service
-class AuthManager {
-    static let shared = AuthManager()
-    var accessToken: String? {
-        return UserDefaults.standard.string(forKey: "access_token")
-    }
-}
+// AuthManager is defined in Services/TaskMarketService.swift

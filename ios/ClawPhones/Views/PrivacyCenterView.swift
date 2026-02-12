@@ -88,17 +88,7 @@ enum DataExportStatus {
     }
 }
 
-struct PrivacySettings: Codable {
-    var faceBlurEnabled: Bool = true
-    var plateBlurEnabled: Bool = true
-    var locationPrecision: LocationPrecision = .city
-    var analyticsEnabled: Bool = false
-    var dataRetentionDays: Int = 30
-    var autoDeleteEnabled: Bool = false
-    var consents: [String: Bool] = [:]
-
-    static let `default` = PrivacySettings()
-}
+// PrivacySettings is defined in Models/PrivacyConfig.swift
 
 struct PrivacyCenterView: View {
     @State private var settings = PrivacySettings.default

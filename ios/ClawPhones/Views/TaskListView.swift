@@ -197,7 +197,7 @@ struct TaskListView: View {
 
             if task.status == .inProgress {
                 ProgressView(value: viewModel.progress(for: task.id))
-                    .tint(.tint)
+                    .tint(Color.accentColor)
             }
         }
         .padding(.vertical, 4)
@@ -226,9 +226,10 @@ final class TaskListViewModel: ObservableObject {
 
         do {
             let service = TaskMarketService.shared
-            availableTasks = await service.fetchAvailableTasks()
-            myTasks = await service.fetchUserTasks(status: .inProgress)
-            completedTasks = await service.fetchUserTasks(status: .completed)
+            availableTasks = try await service.fetchAvailableTasks()
+            let allMyTasks = try await service.fetchMyTasks()
+            myTasks = allMyTasks.filter { $0.status == .inProgress }
+            completedTasks = allMyTasks.filter { $0.status == .completed }
         } catch {
             errorMessage = error.localizedDescription
         }

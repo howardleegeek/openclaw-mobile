@@ -246,7 +246,7 @@ struct WalletView: View {
 
                 Image(systemName: transaction.type.icon)
                     .font(.system(size: 16))
-                    .foregroundStyle(transaction.type.color)
+                    .foregroundStyle(transaction.type.backgroundColor)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -271,7 +271,7 @@ struct WalletView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(transaction.amountText)
                     .font(.headline)
-                    .foregroundStyle(transaction.type.color)
+                    .foregroundStyle(transaction.type.backgroundColor)
                     .fontWeight(.semibold)
 
                 if transaction.status != .completed {
@@ -301,9 +301,9 @@ struct WalletView: View {
             .padding(.vertical, 16)
             .background(
                 Capsule()
-                    .fill(Color.tint)
+                    .fill(Color.accentColor)
             )
-            .shadow(color: Color.tint.opacity(0.4), radius: 8, x: 0, y: 4)
+            .shadow(color: Color.accentColor.opacity(0.4), radius: 8, x: 0, y: 4)
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
@@ -333,11 +333,11 @@ struct WalletView: View {
             case .all:
                 return true
             case .earned:
-                return transaction.type == .earned
+                return transaction.type == .credit || transaction.type == .reward
             case .spent:
-                return transaction.type == .spent
+                return transaction.type == .debit || transaction.type == .penalty
             case .transfers:
-                return transaction.type == .send || transaction.type == .receive
+                return transaction.type == .transfer
             }
         }
     }
@@ -450,12 +450,12 @@ struct WalletView: View {
             Text("\(amount)")
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundStyle(.tint)
+                .foregroundStyle(Color.accentColor)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(
                     Capsule()
-                        .fill(Color.tint.opacity(0.15))
+                        .fill(Color.accentColor.opacity(0.15))
                 )
         }
     }
@@ -485,7 +485,7 @@ struct WalletView: View {
                 .padding(.vertical, 16)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(viewModel.isValidSendRequest ? Color.tint : Color.gray)
+                        .fill(viewModel.isValidSendRequest ? Color.accentColor : Color.gray)
                 )
         }
         .disabled(!viewModel.isValidSendRequest || viewModel.isSending)
@@ -513,85 +513,7 @@ struct WalletData: Codable {
 }
 
 // MARK: - Transaction
-
-enum TransactionType: String, Codable {
-    case earned = "earned"
-    case spent = "spent"
-    case send = "send"
-    case receive = "receive"
-    case refund = "refund"
-
-    var icon: String {
-        switch self {
-        case .earned: return "plus.circle.fill"
-        case .spent: return "minus.circle.fill"
-        case .send: return "arrow.up.circle.fill"
-        case .receive: return "arrow.down.circle.fill"
-        case .refund: return "return.circle.fill"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .earned, .receive: return .green
-        case .spent, .send: return .red
-        case .refund: return .orange
-        }
-    }
-
-    var backgroundColor: Color {
-        switch self {
-        case .earned, .receive: return .green
-        case .spent, .send: return .red
-        case .refund: return .orange
-        }
-    }
-}
-
-enum TransactionStatus: String, Codable {
-    case pending = "pending"
-    case completed = "completed"
-    case failed = "failed"
-
-    var displayName: String {
-        switch self {
-        case .pending: return "处理中"
-        case .completed: return "已完成"
-        case .failed: return "失败"
-        }
-    }
-}
-
-struct Transaction: Identifiable, Codable {
-    let id: String
-    let title: String
-    let amount: Int
-    let type: TransactionType
-    let status: TransactionStatus
-    let date: Date
-    let note: String?
-    let relatedUserId: String?
-
-    var amountText: String {
-        switch type {
-        case .earned, .receive, .refund:
-            return "+\(amount)"
-        case .spent, .send:
-            return "-\(amount)"
-        }
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case title
-        case amount
-        case type
-        case status
-        case date
-        case note
-        case relatedUserId = "related_user_id"
-    }
-}
+// TransactionType, TransactionStatus, and Transaction are defined in Models/TokenEconomy.swift
 
 enum TransactionFilter: String, CaseIterable {
     case all = "all"
@@ -667,13 +589,13 @@ final class WalletViewModel: ObservableObject {
             // Add new transaction
             let newTransaction = Transaction(
                 id: UUID().uuidString,
-                title: "发送给 \(recipientInput)",
+                type: .transfer,
                 amount: Int(amountInput) ?? 0,
-                type: .send,
-                status: .completed,
-                date: Date(),
-                note: noteInput.isEmpty ? nil : noteInput,
-                relatedUserId: nil
+                description: "发送给 \(recipientInput)",
+                counterpartyId: recipientInput,
+                taskId: nil,
+                createdAt: Date(),
+                status: .completed
             )
 
             transactions.insert(newTransaction, at: 0)
@@ -702,63 +624,63 @@ final class WalletViewModel: ObservableObject {
         [
             Transaction(
                 id: "1",
-                title: "任务奖励 - 街景拍摄",
+                type: .reward,
                 amount: 150,
-                type: .earned,
-                status: .completed,
-                date: Date().addingTimeInterval(-3600),
-                note: nil,
-                relatedUserId: nil
+                description: "任务奖励 - 街景拍摄",
+                counterpartyId: nil,
+                taskId: "task_1",
+                createdAt: Date().addingTimeInterval(-3600),
+                status: .completed
             ),
             Transaction(
                 id: "2",
-                title: "发送给 @john_doe",
+                type: .transfer,
                 amount: 100,
-                type: .send,
-                status: .completed,
-                date: Date().addingTimeInterval(-86400),
-                note: "请喝茶",
-                relatedUserId: "john_doe"
+                description: "发送给 @john_doe",
+                counterpartyId: "john_doe",
+                taskId: nil,
+                createdAt: Date().addingTimeInterval(-86400),
+                status: .completed
             ),
             Transaction(
                 id: "3",
-                title: "接收自 @alice",
+                type: .transfer,
                 amount: 200,
-                type: .receive,
-                status: .completed,
-                date: Date().addingTimeInterval(-172800),
-                note: "感谢帮忙",
-                relatedUserId: "alice"
+                description: "接收自 @alice",
+                counterpartyId: "alice",
+                taskId: nil,
+                createdAt: Date().addingTimeInterval(-172800),
+                status: .completed
             ),
             Transaction(
                 id: "4",
-                title: "任务奖励 - 环境监测",
+                type: .reward,
                 amount: 80,
-                type: .earned,
-                status: .pending,
-                date: Date().addingTimeInterval(-259200),
-                note: nil,
-                relatedUserId: nil
+                description: "任务奖励 - 环境监测",
+                counterpartyId: nil,
+                taskId: "task_2",
+                createdAt: Date().addingTimeInterval(-259200),
+                status: .pending
             ),
             Transaction(
                 id: "5",
-                title: "兑换礼品卡",
+                type: .debit,
                 amount: 500,
-                type: .spent,
-                status: .completed,
-                date: Date().addingTimeInterval(-345600),
-                note: "星巴克 50元",
-                relatedUserId: nil
+                description: "兑换礼品卡",
+                counterpartyId: nil,
+                taskId: nil,
+                createdAt: Date().addingTimeInterval(-345600),
+                status: .completed
             ),
             Transaction(
                 id: "6",
-                title: "任务奖励 - 交通分析",
+                type: .reward,
                 amount: 120,
-                type: .earned,
-                status: .completed,
-                date: Date().addingTimeInterval(-432000),
-                note: nil,
-                relatedUserId: nil
+                description: "任务奖励 - 交通分析",
+                counterpartyId: nil,
+                taskId: "task_3",
+                createdAt: Date().addingTimeInterval(-432000),
+                status: .completed
             )
         ]
     }

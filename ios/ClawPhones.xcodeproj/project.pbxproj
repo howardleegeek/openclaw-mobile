@@ -56,6 +56,41 @@
 		DD7A8C00A79304765E826751 /* ConversationListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A672C209A8C2BFB13F1B726 /* ConversationListViewModel.swift */; };
 		E0824FE9B448855B1D60031B /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BF3986839DCF6C9FD74576D /* SetupView.swift */; };
 		E95210B60420431CA5A0F782 /* PlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E958567AAFAC4CB4B2935E2F /* PlanView.swift */; };
+		D1AA0000D5E34A0090B10001 /* CommunityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0000D5E34A0090B10001 /* CommunityService.swift */; };
+		D1AA0001D5E34A0090B10001 /* DeveloperService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0001D5E34A0090B10001 /* DeveloperService.swift */; };
+		D1AA0002D5E34A0090B10001 /* EdgeComputeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0002D5E34A0090B10001 /* EdgeComputeService.swift */; };
+		D1AA0003D5E34A0090B10001 /* ErrorHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0003D5E34A0090B10001 /* ErrorHandler.swift */; };
+		D1AA0004D5E34A0090B10001 /* PerformanceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0004D5E34A0090B10001 /* PerformanceService.swift */; };
+		D1AA0005D5E34A0090B10001 /* PrivacyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0005D5E34A0090B10001 /* PrivacyService.swift */; };
+		D1AA0006D5E34A0090B10001 /* PushNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0006D5E34A0090B10001 /* PushNotificationService.swift */; };
+		D1AA0007D5E34A0090B10001 /* TaskMarketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0007D5E34A0090B10001 /* TaskMarketService.swift */; };
+		D1AA0008D5E34A0090B10001 /* TokenEconomyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0008D5E34A0090B10001 /* TokenEconomyService.swift */; };
+		D1AA0009D5E34A0090B10001 /* WebSocketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0009D5E34A0090B10001 /* WebSocketService.swift */; };
+		D1AA000AD5E34A0090B10001 /* AuditLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA000AD5E34A0090B10001 /* AuditLogView.swift */; };
+		D1AA000BD5E34A0090B10001 /* CommunityDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA000BD5E34A0090B10001 /* CommunityDetailView.swift */; };
+		D1AA000CD5E34A0090B10001 /* CommunityListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA000CD5E34A0090B10001 /* CommunityListView.swift */; };
+		D1AA000DD5E34A0090B10001 /* CommunitySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA000DD5E34A0090B10001 /* CommunitySettingsView.swift */; };
+		D1AA000ED5E34A0090B10001 /* DeveloperPortalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA000ED5E34A0090B10001 /* DeveloperPortalView.swift */; };
+		D1AA000FD5E34A0090B10001 /* EarningsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA000FD5E34A0090B10001 /* EarningsView.swift */; };
+		D1AA0010D5E34A0090B10001 /* EdgeComputeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0010D5E34A0090B10001 /* EdgeComputeView.swift */; };
+		D1AA0011D5E34A0090B10001 /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0011D5E34A0090B10001 /* ExploreView.swift */; };
+		D1AA0012D5E34A0090B10001 /* LeaderboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0012D5E34A0090B10001 /* LeaderboardView.swift */; };
+		D1AA0013D5E34A0090B10001 /* PerformanceDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0013D5E34A0090B10001 /* PerformanceDashboardView.swift */; };
+		D1AA0014D5E34A0090B10001 /* PluginMarketView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0014D5E34A0090B10001 /* PluginMarketView.swift */; };
+		D1AA0015D5E34A0090B10001 /* PrivacyCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0015D5E34A0090B10001 /* PrivacyCenterView.swift */; };
+		D1AA0016D5E34A0090B10001 /* RewardsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0016D5E34A0090B10001 /* RewardsView.swift */; };
+		D1AA0017D5E34A0090B10001 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0017D5E34A0090B10001 /* TaskDetailView.swift */; };
+		D1AA0018D5E34A0090B10001 /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0018D5E34A0090B10001 /* TaskListView.swift */; };
+		D1AA0019D5E34A0090B10001 /* UsageDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0019D5E34A0090B10001 /* UsageDashboardView.swift */; };
+		D1AA001AD5E34A0090B10001 /* WalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA001AD5E34A0090B10001 /* WalletView.swift */; };
+		D1AA001BD5E34A0090B10001 /* ClawTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA001BD5E34A0090B10001 /* ClawTask.swift */; };
+		D1AA001CD5E34A0090B10001 /* Community.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA001CD5E34A0090B10001 /* Community.swift */; };
+		D1AA001DD5E34A0090B10001 /* ComputeJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA001DD5E34A0090B10001 /* ComputeJob.swift */; };
+		D1AA001ED5E34A0090B10001 /* DeveloperSDK.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA001ED5E34A0090B10001 /* DeveloperSDK.swift */; };
+		D1AA001FD5E34A0090B10001 /* PerformanceMetric.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA001FD5E34A0090B10001 /* PerformanceMetric.swift */; };
+		D1AA0020D5E34A0090B10001 /* PrivacyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0020D5E34A0090B10001 /* PrivacyConfig.swift */; };
+		D1AA0021D5E34A0090B10001 /* TokenEconomy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0021D5E34A0090B10001 /* TokenEconomy.swift */; };
+		D1AA0022D5E34A0090B10001 /* AppearanceMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AA0022D5E34A0090B10001 /* AppearanceMode.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -145,6 +180,41 @@
 		F978F2F0D2B85014470EDB1F /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		F978F2F0D2B85014470EDB20 /* RelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayClient.swift; sourceTree = "<group>"; };
 		FB4B6AD8A22BC95F89042271 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		D0AA0000D5E34A0090B10001 /* CommunityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityService.swift; sourceTree = "<group>"; };
+		D0AA0001D5E34A0090B10001 /* DeveloperService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperService.swift; sourceTree = "<group>"; };
+		D0AA0002D5E34A0090B10001 /* EdgeComputeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeComputeService.swift; sourceTree = "<group>"; };
+		D0AA0003D5E34A0090B10001 /* ErrorHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorHandler.swift; sourceTree = "<group>"; };
+		D0AA0004D5E34A0090B10001 /* PerformanceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceService.swift; sourceTree = "<group>"; };
+		D0AA0005D5E34A0090B10001 /* PrivacyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyService.swift; sourceTree = "<group>"; };
+		D0AA0006D5E34A0090B10001 /* PushNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationService.swift; sourceTree = "<group>"; };
+		D0AA0007D5E34A0090B10001 /* TaskMarketService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskMarketService.swift; sourceTree = "<group>"; };
+		D0AA0008D5E34A0090B10001 /* TokenEconomyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEconomyService.swift; sourceTree = "<group>"; };
+		D0AA0009D5E34A0090B10001 /* WebSocketService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketService.swift; sourceTree = "<group>"; };
+		D0AA000AD5E34A0090B10001 /* AuditLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditLogView.swift; sourceTree = "<group>"; };
+		D0AA000BD5E34A0090B10001 /* CommunityDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityDetailView.swift; sourceTree = "<group>"; };
+		D0AA000CD5E34A0090B10001 /* CommunityListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityListView.swift; sourceTree = "<group>"; };
+		D0AA000DD5E34A0090B10001 /* CommunitySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunitySettingsView.swift; sourceTree = "<group>"; };
+		D0AA000ED5E34A0090B10001 /* DeveloperPortalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperPortalView.swift; sourceTree = "<group>"; };
+		D0AA000FD5E34A0090B10001 /* EarningsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarningsView.swift; sourceTree = "<group>"; };
+		D0AA0010D5E34A0090B10001 /* EdgeComputeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeComputeView.swift; sourceTree = "<group>"; };
+		D0AA0011D5E34A0090B10001 /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
+		D0AA0012D5E34A0090B10001 /* LeaderboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardView.swift; sourceTree = "<group>"; };
+		D0AA0013D5E34A0090B10001 /* PerformanceDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceDashboardView.swift; sourceTree = "<group>"; };
+		D0AA0014D5E34A0090B10001 /* PluginMarketView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginMarketView.swift; sourceTree = "<group>"; };
+		D0AA0015D5E34A0090B10001 /* PrivacyCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyCenterView.swift; sourceTree = "<group>"; };
+		D0AA0016D5E34A0090B10001 /* RewardsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardsView.swift; sourceTree = "<group>"; };
+		D0AA0017D5E34A0090B10001 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
+		D0AA0018D5E34A0090B10001 /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
+		D0AA0019D5E34A0090B10001 /* UsageDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageDashboardView.swift; sourceTree = "<group>"; };
+		D0AA001AD5E34A0090B10001 /* WalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletView.swift; sourceTree = "<group>"; };
+		D0AA001BD5E34A0090B10001 /* ClawTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawTask.swift; sourceTree = "<group>"; };
+		D0AA001CD5E34A0090B10001 /* Community.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Community.swift; sourceTree = "<group>"; };
+		D0AA001DD5E34A0090B10001 /* ComputeJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeJob.swift; sourceTree = "<group>"; };
+		D0AA001ED5E34A0090B10001 /* DeveloperSDK.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperSDK.swift; sourceTree = "<group>"; };
+		D0AA001FD5E34A0090B10001 /* PerformanceMetric.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceMetric.swift; sourceTree = "<group>"; };
+		D0AA0020D5E34A0090B10001 /* PrivacyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyConfig.swift; sourceTree = "<group>"; };
+		D0AA0021D5E34A0090B10001 /* TokenEconomy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEconomy.swift; sourceTree = "<group>"; };
+		D0AA0022D5E34A0090B10001 /* AppearanceMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceMode.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -224,7 +294,9 @@
 			children = (
 				DAA521445573D71EA58448AA /* ClawPhonesApp.swift */,
 				0C25043BCDD3165B1A9EE994 /* ContentView.swift */,
-			);
+			
+				D0AA0022D5E34A0090B10001 /* AppearanceMode.swift */,
+);
 			path = App;
 			sourceTree = "<group>";
 		};
@@ -269,7 +341,18 @@
 				A2B3C4D50100000000000006 /* SharePayloadBridge.swift */,
 				A2B3C4D50100000000000007 /* MessageQueue.swift */,
 				A2B3C4D50100000000000008 /* ConversationCache.swift */,
-			);
+			
+				D0AA0000D5E34A0090B10001 /* CommunityService.swift */,
+				D0AA0001D5E34A0090B10001 /* DeveloperService.swift */,
+				D0AA0002D5E34A0090B10001 /* EdgeComputeService.swift */,
+				D0AA0003D5E34A0090B10001 /* ErrorHandler.swift */,
+				D0AA0004D5E34A0090B10001 /* PerformanceService.swift */,
+				D0AA0005D5E34A0090B10001 /* PrivacyService.swift */,
+				D0AA0006D5E34A0090B10001 /* PushNotificationService.swift */,
+				D0AA0007D5E34A0090B10001 /* TaskMarketService.swift */,
+				D0AA0008D5E34A0090B10001 /* TokenEconomyService.swift */,
+				D0AA0009D5E34A0090B10001 /* WebSocketService.swift */,
+);
 			path = Services;
 			sourceTree = "<group>";
 		};
@@ -301,7 +384,25 @@
 				1B8D12A6636D41058D5DB456 /* SettingsView.swift */,
 				F0D5888BD4C147DE81C8114D /* ThinkingIndicator.swift */,
 				8BF3986839DCF6C9FD74576D /* SetupView.swift */,
-			);
+			
+				D0AA000AD5E34A0090B10001 /* AuditLogView.swift */,
+				D0AA000BD5E34A0090B10001 /* CommunityDetailView.swift */,
+				D0AA000CD5E34A0090B10001 /* CommunityListView.swift */,
+				D0AA000DD5E34A0090B10001 /* CommunitySettingsView.swift */,
+				D0AA000ED5E34A0090B10001 /* DeveloperPortalView.swift */,
+				D0AA000FD5E34A0090B10001 /* EarningsView.swift */,
+				D0AA0010D5E34A0090B10001 /* EdgeComputeView.swift */,
+				D0AA0011D5E34A0090B10001 /* ExploreView.swift */,
+				D0AA0012D5E34A0090B10001 /* LeaderboardView.swift */,
+				D0AA0013D5E34A0090B10001 /* PerformanceDashboardView.swift */,
+				D0AA0014D5E34A0090B10001 /* PluginMarketView.swift */,
+				D0AA0015D5E34A0090B10001 /* PrivacyCenterView.swift */,
+				D0AA0016D5E34A0090B10001 /* RewardsView.swift */,
+				D0AA0017D5E34A0090B10001 /* TaskDetailView.swift */,
+				D0AA0018D5E34A0090B10001 /* TaskListView.swift */,
+				D0AA0019D5E34A0090B10001 /* UsageDashboardView.swift */,
+				D0AA001AD5E34A0090B10001 /* WalletView.swift */,
+);
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -311,7 +412,15 @@
 				7CF92F190A301C0B0D50AE08 /* AlertEvent.swift */,
 				5B9BE935A3A036729805815B /* Message.swift */,
 				7BEB09C2D39E49319063F40F /* StreamChunk.swift */,
-			);
+			
+				D0AA001BD5E34A0090B10001 /* ClawTask.swift */,
+				D0AA001CD5E34A0090B10001 /* Community.swift */,
+				D0AA001DD5E34A0090B10001 /* ComputeJob.swift */,
+				D0AA001ED5E34A0090B10001 /* DeveloperSDK.swift */,
+				D0AA001FD5E34A0090B10001 /* PerformanceMetric.swift */,
+				D0AA0020D5E34A0090B10001 /* PrivacyConfig.swift */,
+				D0AA0021D5E34A0090B10001 /* TokenEconomy.swift */,
+);
 			path = Models;
 			sourceTree = "<group>";
 		};
@@ -498,7 +607,43 @@
 				A1B2C3D40100000000000004 /* SharePayloadBridge.swift in Sources */,
 				A1B2C3D40100000000000005 /* MessageQueue.swift in Sources */,
 				A1B2C3D40100000000000006 /* ConversationCache.swift in Sources */,
-			);
+			
+				D1AA0000D5E34A0090B10001 /* CommunityService.swift in Sources */,
+				D1AA0001D5E34A0090B10001 /* DeveloperService.swift in Sources */,
+				D1AA0002D5E34A0090B10001 /* EdgeComputeService.swift in Sources */,
+				D1AA0003D5E34A0090B10001 /* ErrorHandler.swift in Sources */,
+				D1AA0004D5E34A0090B10001 /* PerformanceService.swift in Sources */,
+				D1AA0005D5E34A0090B10001 /* PrivacyService.swift in Sources */,
+				D1AA0006D5E34A0090B10001 /* PushNotificationService.swift in Sources */,
+				D1AA0007D5E34A0090B10001 /* TaskMarketService.swift in Sources */,
+				D1AA0008D5E34A0090B10001 /* TokenEconomyService.swift in Sources */,
+				D1AA0009D5E34A0090B10001 /* WebSocketService.swift in Sources */,
+				D1AA000AD5E34A0090B10001 /* AuditLogView.swift in Sources */,
+				D1AA000BD5E34A0090B10001 /* CommunityDetailView.swift in Sources */,
+				D1AA000CD5E34A0090B10001 /* CommunityListView.swift in Sources */,
+				D1AA000DD5E34A0090B10001 /* CommunitySettingsView.swift in Sources */,
+				D1AA000ED5E34A0090B10001 /* DeveloperPortalView.swift in Sources */,
+				D1AA000FD5E34A0090B10001 /* EarningsView.swift in Sources */,
+				D1AA0010D5E34A0090B10001 /* EdgeComputeView.swift in Sources */,
+				D1AA0011D5E34A0090B10001 /* ExploreView.swift in Sources */,
+				D1AA0012D5E34A0090B10001 /* LeaderboardView.swift in Sources */,
+				D1AA0013D5E34A0090B10001 /* PerformanceDashboardView.swift in Sources */,
+				D1AA0014D5E34A0090B10001 /* PluginMarketView.swift in Sources */,
+				D1AA0015D5E34A0090B10001 /* PrivacyCenterView.swift in Sources */,
+				D1AA0016D5E34A0090B10001 /* RewardsView.swift in Sources */,
+				D1AA0017D5E34A0090B10001 /* TaskDetailView.swift in Sources */,
+				D1AA0018D5E34A0090B10001 /* TaskListView.swift in Sources */,
+				D1AA0019D5E34A0090B10001 /* UsageDashboardView.swift in Sources */,
+				D1AA001AD5E34A0090B10001 /* WalletView.swift in Sources */,
+				D1AA001BD5E34A0090B10001 /* ClawTask.swift in Sources */,
+				D1AA001CD5E34A0090B10001 /* Community.swift in Sources */,
+				D1AA001DD5E34A0090B10001 /* ComputeJob.swift in Sources */,
+				D1AA001ED5E34A0090B10001 /* DeveloperSDK.swift in Sources */,
+				D1AA001FD5E34A0090B10001 /* PerformanceMetric.swift in Sources */,
+				D1AA0020D5E34A0090B10001 /* PrivacyConfig.swift in Sources */,
+				D1AA0021D5E34A0090B10001 /* TokenEconomy.swift in Sources */,
+				D1AA0022D5E34A0090B10001 /* AppearanceMode.swift in Sources */,
+);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A3B4C5D60100000000000001 /* Sources */ = {

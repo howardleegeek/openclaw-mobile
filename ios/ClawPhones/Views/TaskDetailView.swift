@@ -296,7 +296,7 @@ struct TaskDetailView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(value: viewModel.progress)
-                    .tint(.tint)
+                    .tint(Color.accentColor)
 
                 HStack {
                     Text("\(Int(viewModel.progress * 100))%")
@@ -340,7 +340,7 @@ struct TaskDetailView: View {
                 }
 
             case .completed:
-                Button("已", systemImage: "checkmark")
+                Button("已完成", action: {})
                     .disabled(true)
                     .frame(maxWidth: .infinity)
 
@@ -418,7 +418,9 @@ final class TaskDetailViewModel: ObservableObject {
 
         do {
             let service = TaskMarketService.shared
-            task = await service.fetchTask(id: taskId)
+            // Fetch from myTasks since fetchTask doesn't exist
+            let tasks = try await service.fetchMyTasks()
+            task = tasks.first(where: { $0.id == taskId })
             updateProgressDisplay()
         } catch {
             errorMessage = error.localizedDescription

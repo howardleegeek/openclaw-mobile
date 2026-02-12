@@ -200,12 +200,12 @@ class PerformanceService: ObservableObject {
         }
     }
 
-    private func checkWebSocketConnection() async -> (connected: Bool) {
+    private func checkWebSocketConnection() async -> Bool {
         // Would integrate with WebSocketManager
         return false
     }
 
-    private func checkPushRegistration() async -> (registered: Bool) {
+    private func checkPushRegistration() async -> Bool {
         // Would integrate with PushNotificationService
         return false
     }
@@ -405,7 +405,7 @@ class PerformanceService: ObservableObject {
 
 // MARK: - Extensions
 extension ProcessInfo {
-    var processorInfo: (cpuUsage: Double)? {
+    var processorInfo: Double? {
         var numInfo: processor_info_array_t?
         var numCpuInfo: mach_msg_type_number_t = 0
 

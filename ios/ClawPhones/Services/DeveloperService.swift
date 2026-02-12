@@ -283,12 +283,12 @@ final class DeveloperService: ObservableObject {
     }
 
     /// Get aggregated usage statistics
-    func fetchUsageStats() async throws -> UsageStats {
+    func fetchUsageStats() async throws -> DeveloperUsageStats {
         let endpoint = try endpointURL(path: "/v1/developer/usage/stats")
         let request = try buildRequest(url: endpoint, method: "GET")
 
         let data = try await perform(request)
-        return try JSONDecoder().decode(UsageStats.self, from: data)
+        return try JSONDecoder().decode(DeveloperUsageStats.self, from: data)
     }
 
     // MARK: - Plugin Management
@@ -378,7 +378,7 @@ final class DeveloperService: ObservableObject {
 
 // MARK: - Supporting Types
 
-struct UsageStats: Codable {
+struct DeveloperUsageStats: Codable {
     let totalRequests: Int
     let averageLatency: Double
     let mostUsedEndpoint: String

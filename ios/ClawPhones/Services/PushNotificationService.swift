@@ -290,7 +290,8 @@ class PushNotificationService: NSObject, ObservableObject {
         content.body = body
         content.sound = .default
         content.categoryIdentifier = type.category.identifier
-        content.badge = (UIApplication.shared.applicationIconBadgeNumber ?? 0) + 1
+        let count = UIApplication.shared.applicationIconBadgeNumber ?? 0
+        content.badge = NSNumber(value: count + 1)
 
         // Add custom data
         if var userInfo = userInfo {
@@ -498,7 +499,7 @@ extension PushNotificationService: UNUserNotificationCenterDelegate {
             )
         } else {
             // Default tap - route to appropriate view
-            if let route = routeNotification(userInfo as [String: Any]) {
+            if let route = routeNotification(userInfo as? [String: Any] ?? [:]) {
                 NotificationCenter.default.post(
                     name: Notification.Name("NavigateToTab"),
                     object: nil,

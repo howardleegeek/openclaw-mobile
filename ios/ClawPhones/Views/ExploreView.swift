@@ -188,192 +188,19 @@ struct ExploreCard: View {
 }
 
 // MARK: - 占位视图
-// 以下视图为占位实现，如果这些视图已存在，可以删除这些占位
+// NodeModeSettingsView is defined in Views/NodeModeSettingsView.swift
+// DeveloperPortalView is defined in Views/DeveloperPortalView.swift
 
-struct NodeModeSettingsView: View {
-    var body: some View {
-        List {
-            Section("Node Mode 设置") {
-                Toggle("启用智能监控", isOn: .constant(false))
-                Toggle("推送告警通知", isOn: .constant(true))
-            }
+// UsageDashboardView is defined in Views/UsageDashboardView.swift
+// PluginMarketView is defined in Views/PluginMarketView.swift
 
-            Section("检测阈值") {
-                HStack {
-                    Text("置信度阈值")
-                    Spacer()
-                    Text("75%")
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack {
-                    Text("检测间隔")
-                    Spacer()
-                    Text("5 秒")
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section {
-                Text("Node Mode 提供智能物体检测和告警功能，需要完整实现。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("Node Mode 设置")
-    }
-}
-
-struct DeveloperPortalView: View {
-    var body: some View {
-        List {
-            Section {
-                Text("开发者门户")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .padding(.vertical)
-
-                Text("访问 API 文档、SDK 下载和开发者资源。")
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("开发者资源")
-            }
-
-            Section {
-                Link(destination: URL(string: "https://docs.example.com")!) {
-                    Label("API 文档", systemImage: "book.fill")
-                }
-                Label("SDK 下载", systemImage: "square.and.arrow.down.fill")
-                Label("示例代码", systemImage: "code")
-            }
-        }
-        .navigationTitle("Developer Portal")
-    }
-}
-
-struct UsageDashboardView: View {
-    var body: some View {
-        List {
-            Section("资源使用概览") {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("CPU 使用率")
-                            .font(.headline)
-                        Text("45%")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
-                    }
-
-                    Spacer()
-
-                    ProgressView(value: 0.45)
-                        .frame(width: 100)
-                }
-
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("内存使用")
-                            .font(.headline)
-                        Text("1.2 GB")
-                            .font(.title2)
-                            .foregroundStyle(.green)
-                    }
-
-                    Spacer()
-
-                    ProgressView(value: 0.38)
-                        .frame(width: 100)
-                }
-            }
-
-            Section {
-                Text("使用情况仪表板需要连接真实数据源。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("Usage Dashboard")
-    }
-}
-
-struct PluginMarketView: View {
-    var body: some View {
-        List {
-            Section {
-                Text("插件市场")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .padding(.vertical)
-
-                Text("浏览和安装社区插件来扩展应用功能。")
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("插件中心")
-            }
-
-            Section {
-                Label("智能翻译插件", systemImage: "globe")
-                Label("数据可视化插件", systemImage: "chart.xyaxis.line")
-                Label("自动化任务插件", systemImage: "arrow.triangle.2.circlepath")
-            }
-        }
-        .navigationTitle("Plugin Market")
-    }
-}
-
-struct PerformanceDashboardView: View {
-    var body: some View {
-        List {
-            Section("系统性能") {
-                PerformanceRow(title: "响应时间", value: "120ms", color: .green)
-                PerformanceRow(title: "错误率", value: "0.12%", color: .green)
-                PerformanceRow(title: "可用性", value: "99.8%", color: .green)
-            }
-
-            Section("网络状态") {
-                PerformanceRow(title: "延迟", value: "45ms", color: .blue)
-                PerformanceRow(title: "带宽", value: "85%", color: .orange)
-            }
-
-            Section {
-                Text("性能仪表板需要连接真实监控系统。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("Performance Dashboard")
-    }
-}
-
-struct PerformanceRow: View {
-    let title: String
-    let value: String
-    let color: Color
-
-    var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(value)
-                .foregroundStyle(color)
-                .fontWeight(.semibold)
-        }
-    }
-}
+// PerformanceDashboardView is defined in Views/PerformanceDashboardView.swift
 
 // MARK: - CoverageMapView 扩展
 extension CoverageMapView {
     static var nodeCount: Int {
         // 返回节点数量，需要从实际数据源获取
         return 3
-    }
-}
-
-// MARK: - EdgeComputeViewModel 扩展
-extension EdgeComputeViewModel {
-    var isConnected: Bool {
-        // 返回 Edge Compute 连接状态，需要从实际数据源获取
-        return true
     }
 }
 

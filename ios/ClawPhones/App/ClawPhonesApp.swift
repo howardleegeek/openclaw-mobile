@@ -26,6 +26,7 @@ struct ClawPhonesApp: App {
 
 // MARK: - AppDelegate
 
+@MainActor
 class AppDelegate: NSObject, UIApplicationDelegate {
     let pushNotificationService = PushNotificationService.shared
 

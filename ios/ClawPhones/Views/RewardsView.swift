@@ -671,7 +671,7 @@ enum BadgeRarity: String, Codable {
 
 // MARK: - Badge
 
-struct Badge: Identifiable, Codable {
+struct RewardBadge: Identifiable, Codable {
     let id: String
     let name: String
     let description: String
@@ -701,7 +701,7 @@ struct RewardsData: Codable {
     let streakData: DailyStreakData
     let earningsSummary: RewardsEarningsSummary
     let availableRewards: [Reward]
-    let badges: [Badge]
+    let badges: [RewardBadge]
 
     enum CodingKeys: String, CodingKey {
         case streakData = "streak_data"
@@ -891,9 +891,9 @@ final class RewardsViewModel: ObservableObject {
         ]
     }
 
-    private func generateMockBadges() -> [Badge] {
+    private func generateMockBadges() -> [RewardBadge] {
         [
-            Badge(
+            RewardBadge(
                 id: "first_task",
                 name: "初出茅庐",
                 description: "完成第一个任务",
@@ -902,7 +902,7 @@ final class RewardsViewModel: ObservableObject {
                 requirements: ["完成1个任务"],
                 unlockedAt: Date().addingTimeInterval(-86400 * 5)
             ),
-            Badge(
+            RewardBadge(
                 id: "week_streak",
                 name: "七日连签",
                 description: "连续签到7天",
@@ -911,7 +911,7 @@ final class RewardsViewModel: ObservableObject {
                 requirements: ["连续签到7天"],
                 unlockedAt: Date().addingTimeInterval(-86400 * 2)
             ),
-            Badge(
+            RewardBadge(
                 id: "task_master",
                 name: "任务大师",
                 description: "累计完成100个任务",
@@ -920,7 +920,7 @@ final class RewardsViewModel: ObservableObject {
                 requirements: ["完成100个任务"],
                 unlockedAt: nil
             ),
-            Badge(
+            RewardBadge(
                 id: "top_contributor",
                 name: "顶尖贡献者",
                 description: "累计获得10000积分",

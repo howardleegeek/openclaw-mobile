@@ -13,15 +13,15 @@ struct PerformanceDashboardView: View {
     @State private var autoRefresh = false
 
     // Health Status
-    @State private var relayStatus: HealthStatus = .healthy
-    @State private var backendStatus: HealthStatus = .healthy
-    @State private var webSocketStatus: HealthStatus = .healthy
-    @State private var pushStatus: HealthStatus = .healthy
+    @State private var relayStatus: DashboardHealthStatus = .healthy
+    @State private var backendStatus: DashboardHealthStatus = .healthy
+    @State private var webSocketStatus: DashboardHealthStatus = .healthy
+    @State private var pushStatus: DashboardHealthStatus = .healthy
     @State private var lastCheckedTime = Date()
 
     // Device Metrics
     @State private var memoryUsage: Double = 45
-    @State private let totalMemory = 8192
+    private let totalMemory = 8192
     @State private var cpuUsage: Double = 32
     @State private var batteryDrainRate: Double = 0.5
     @State private var frameRate: Double = 60
@@ -46,7 +46,7 @@ struct PerformanceDashboardView: View {
 
     private let refreshInterval: TimeInterval = 60.0
 
-    enum HealthStatus {
+    enum DashboardHealthStatus {
         case healthy
         case warning
         case critical
@@ -64,6 +64,14 @@ struct PerformanceDashboardView: View {
             case .healthy: return "checkmark.circle.fill"
             case .warning: return "exclamationmark.triangle.fill"
             case .critical: return "xmark.circle.fill"
+            }
+        }
+
+        var displayName: String {
+            switch self {
+            case .healthy: return "Healthy"
+            case .warning: return "Warning"
+            case .critical: return "Critical"
             }
         }
     }
@@ -391,7 +399,7 @@ struct PerformanceDashboardView: View {
 
 struct HealthStatusRow: View {
     let title: String
-    let status: HealthStatus
+    let status: PerformanceDashboardView.DashboardHealthStatus
     let lastChecked: Date
 
     var body: some View {
@@ -408,15 +416,7 @@ struct HealthStatusRow: View {
     }
 }
 
-extension PerformanceDashboardView.HealthStatus {
-    var displayName: String {
-        switch self {
-        case .healthy: return "正常"
-        case .warning: return "警告"
-        case .critical: return "严重"
-        }
-    }
-}
+// displayName is now part of DashboardHealthStatus enum
 
 struct GaugeRow: View {
     let title: String
