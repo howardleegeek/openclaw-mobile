@@ -4635,8 +4635,8 @@ async def get_community(community_id: str, request: Request) -> Any:
     return d
 
 
-@app.delete("/v1/communities/{community_id}/members/me", status_code=204)
-async def leave_community(community_id: str, request: Request) -> Any:
+@app.delete("/v1/communities/{community_id}/members/me", status_code=204, response_class=Response)
+async def leave_community(community_id: str, request: Request) -> Response:
     """Leave a community."""
     await _enforce_rate_limit(request)
 
